@@ -3,6 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/xraph/go-utils)](https://goreportcard.com/report/github.com/xraph/go-utils)
+[![CI](https://github.com/xraph/go-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/xraph/go-utils/actions/workflows/ci.yml)
 
 A collection of production-ready Go utilities for building robust applications with clean error handling and structured logging.
 
