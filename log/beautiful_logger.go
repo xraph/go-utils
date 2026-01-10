@@ -409,9 +409,7 @@ func (bl *BeautifulLogger) clone() *BeautifulLogger {
 
 	// Manual copy instead of maps.Copy to avoid hot path overhead
 	newFields := make(map[string]any, len(bl.fields))
-	for k, v := range bl.fields {
-		newFields[k] = v
-	}
+	maps.Copy(newFields, bl.fields)
 
 	return &BeautifulLogger{
 		level:       bl.level,

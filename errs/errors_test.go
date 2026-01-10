@@ -47,6 +47,7 @@ func TestContextualError(t *testing.T) {
 
 	// Test chaining
 	contextual.WithContext("request_id", "abc")
+
 	ctx = contextual.GetContext()
 	if ctx["request_id"] != "abc" {
 		t.Errorf("chained context value = %v, want 'abc'", ctx["request_id"])
@@ -92,12 +93,12 @@ func TestCausedError(t *testing.T) {
 	err := ErrInternal("operation failed", innerErr)
 
 	// Test Cause method
-	if cause := err.Cause(); cause != innerErr {
+	if cause := err.Cause(); !errors.Is(cause, innerErr) {
 		t.Errorf("Cause() = %v, want %v", cause, innerErr)
 	}
 
 	// Test Unwrap method
-	if unwrapped := err.Unwrap(); unwrapped != innerErr {
+	if unwrapped := err.Unwrap(); !errors.Is(unwrapped, innerErr) {
 		t.Errorf("Unwrap() = %v, want %v", unwrapped, innerErr)
 	}
 }

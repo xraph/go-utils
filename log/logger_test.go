@@ -55,7 +55,7 @@ func TestNoopLogger(t *testing.T) {
 	noopLog := log.NewNoopLogger()
 
 	// Verify it implements the Logger interface
-	var _ log.Logger = noopLog
+	var _ = noopLog
 
 	// Test all methods don't panic
 	t.Run("BasicLogging", func(t *testing.T) {
@@ -81,9 +81,9 @@ func TestNoopLogger(t *testing.T) {
 
 		// Verify they return loggers (should be noop instances)
 		var (
-			_ log.Logger = withFieldsLog
-			_ log.Logger = withContextLog
-			_ log.Logger = namedLog
+			_ = withFieldsLog
+			_ = withContextLog
+			_ = namedLog
 		)
 
 		// Test chaining
@@ -98,7 +98,7 @@ func TestNoopLogger(t *testing.T) {
 	t.Run("Sugar", func(t *testing.T) {
 		sugar := noopLog.Sugar()
 
-		var _ log.SugarLogger = sugar
+		var _ = sugar
 
 		sugar.Infow("info with fields", "key1", "value1", "key2", 42)
 		sugar.Errorw("error with fields", "error", "test error")
@@ -129,7 +129,7 @@ func TestLoggerInterface(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Verify interface compliance
-			var _ log.Logger = tc.logger
+			var _ = tc.logger
 
 			// Test that methods don't panic (except Fatal)
 			tc.logger.Debug("test debug")
@@ -145,21 +145,21 @@ func TestLoggerInterface(t *testing.T) {
 			// Test With methods
 			withFields := tc.logger.With(log.String("test", "value"))
 
-			var _ log.Logger = withFields
+			var _ = withFields
 
 			ctx := context.Background()
 			withContext := tc.logger.WithContext(ctx)
 
-			var _ log.Logger = withContext
+			var _ = withContext
 
 			named := tc.logger.Named("test")
 
-			var _ log.Logger = named
+			var _ = named
 
 			// Test Sugar
 			sugar := tc.logger.Sugar()
 
-			var _ log.SugarLogger = sugar
+			var _ = sugar
 
 			// Test Sync
 			err := tc.logger.Sync()

@@ -60,14 +60,16 @@ func TestBeautifulLogger(t *testing.T) {
 
 		// Test concurrent writes don't cause data races
 		done := make(chan bool)
-		for i := 0; i < 10; i++ {
+
+		for i := range 10 {
 			go func(id int) {
 				logger.Info("concurrent message", log.Int("id", id))
+
 				done <- true
 			}(i)
 		}
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			<-done
 		}
 	})
@@ -94,8 +96,10 @@ func BenchmarkBeautifulLogger(b *testing.B) {
 	old := os.Stdout
 	_, w, _ := os.Pipe()
 	os.Stdout = w
+
 	defer func() {
 		os.Stdout = old
+
 		w.Close()
 	}()
 
@@ -107,8 +111,7 @@ func BenchmarkBeautifulLogger(b *testing.B) {
 		log.Duration("elapsed", time.Millisecond),
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		logger.Info("benchmark message", fields...)
 	}
 }
@@ -119,17 +122,19 @@ func BenchmarkBeautifulLoggerWith(b *testing.B) {
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
 	go io.Copy(io.Discard, r)
+
 	defer func() {
 		os.Stdout = old
+
 		w.Close()
 		r.Close()
 	}()
 
 	logger := log.NewBeautifulLogger("bench")
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		childLog := logger.With(log.String("key", "value"))
 		childLog.Info("test")
 	}

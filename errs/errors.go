@@ -50,7 +50,7 @@ type CausedError interface {
 // Error code constants for structured errors.
 // These are generic codes that can be extended in consuming packages.
 const (
-	// Generic error codes
+	// Generic error codes.
 	CodeInternal         = "INTERNAL_ERROR"
 	CodeValidation       = "VALIDATION_ERROR"
 	CodeNotFound         = "NOT_FOUND"
@@ -107,7 +107,9 @@ func (e *Error) WithContext(key string, value any) ContextualError {
 	if e.Ctx == nil {
 		e.Ctx = make(map[string]any)
 	}
+
 	e.Ctx[key] = value
+
 	return e
 }
 
@@ -177,13 +179,13 @@ func ErrValidation(message string, cause error) *Error {
 
 // ErrNotFound creates a not found error.
 func ErrNotFound(resource string) *Error {
-	return NewError(CodeNotFound, fmt.Sprintf("%s not found", resource), nil).
+	return NewError(CodeNotFound, resource+" not found", nil).
 		WithContext("resource", resource).(*Error)
 }
 
 // ErrAlreadyExists creates an already exists error.
 func ErrAlreadyExists(resource string) *Error {
-	return NewError(CodeAlreadyExists, fmt.Sprintf("%s already exists", resource), nil).
+	return NewError(CodeAlreadyExists, resource+" already exists", nil).
 		WithContext("resource", resource).(*Error)
 }
 
@@ -202,7 +204,7 @@ func ErrTimeout(operation string, duration time.Duration) *Error {
 
 // ErrCancelled creates a cancelled operation error.
 func ErrCancelled(operation string) *Error {
-	return NewError(CodeCancelled, fmt.Sprintf("%s was cancelled", operation), nil).
+	return NewError(CodeCancelled, operation+" was cancelled", nil).
 		WithContext("operation", operation).(*Error)
 }
 
@@ -435,7 +437,8 @@ func GetHTTPStatusCode(err error) int {
 	}
 
 	// Then check if the error itself implements HTTPError
-	if httpErr, ok := err.(HTTPError); ok {
+	var httpErr HTTPError
+	if errors.As(err, &httpErr) {
 		return httpErr.StatusCode()
 	}
 
