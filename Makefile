@@ -364,14 +364,33 @@ release: release-check
 	@echo ""
 	@echo "$(COLOR_YELLOW)To create a release:$(COLOR_RESET)"
 	@echo "  1. Choose version (e.g., v1.2.3)"
-	@echo "  2. Run: make tag VERSION=v1.2.3"
-	@echo "  3. GitHub Actions will automatically create the release"
+	@echo "  2. Run: make auto-release VERSION=v1.2.3"
+	@echo "  3. Or manually: make tag VERSION=v1.2.3"
 	@echo ""
 	@echo "$(COLOR_BLUE)GitHub Release Workflow:$(COLOR_RESET)"
 	@echo "  - Triggers on new version tags (v*)"
 	@echo "  - Runs tests and linters"
 	@echo "  - Creates GitHub Release with changelog"
 	@echo "  - Publishes package documentation"
+
+.PHONY: auto-release
+## auto-release: Trigger automated release workflow (usage: make auto-release VERSION=v1.2.3)
+auto-release:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "$(COLOR_RED)VERSION required. Usage: make auto-release VERSION=v1.2.3$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_GREEN)Triggering automated release for $(VERSION)...$(COLOR_RESET)"
+	@if command -v gh >/dev/null 2>&1; then \
+		gh workflow run auto-release.yml -f version=$(VERSION); \
+		echo "$(COLOR_GREEN)✓ Release workflow triggered$(COLOR_RESET)"; \
+		echo "$(COLOR_BLUE)View progress: https://github.com/$$(git config --get remote.origin.url | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/actions$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_RED)Error: GitHub CLI (gh) not found$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)Install with: brew install gh$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)Or use GitHub UI: Actions → Auto Release → Run workflow$(COLOR_RESET)"; \
+		exit 1; \
+	fi
 
 .PHONY: releases
 ## releases: List recent releases

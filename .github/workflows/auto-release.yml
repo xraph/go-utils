@@ -1,0 +1,149 @@
+name: Auto Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create Tag and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Validate version format
+      run: |
+        VERSION="${{ inputs.version }}"
+        if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+          echo "Error: Version must match format v1.2.3 or v1.2.3-beta.1"
+          exit 1
+        fi
+    
+    - name: Check if tag exists
+      run: |
+        if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then
+          echo "Error: Tag ${{ inputs.version }} already exists"
+          exit 1
+        fi
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-release-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-release-
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Run tests
+      run: make test
+    
+    - name: Run linters
+      run: make lint
+    
+    - name: Check code is clean
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "Error: Working directory is not clean"
+          git status --short
+          exit 1
+        fi
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -z "$PREV_TAG" ]; then
+          CHANGELOG=$(git log --oneline --decorate)
+        else
+          CHANGELOG=$(git log ${PREV_TAG}..HEAD --oneline --decorate)
+        fi
+        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Also output previous tag for release notes
+        echo "PREV_TAG=$PREV_TAG" >> $GITHUB_OUTPUT
+    
+    - name: Configure Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - name: Create and push tag
+      run: |
+        git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }}"
+        git push origin "${{ inputs.version }}"
+    
+    - name: Create GitHub Release
+      uses: ncipollo/release-action@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ inputs.version }}
+        name: Release ${{ inputs.version }}
+        body: |
+          # Release ${{ inputs.version }}
+          
+          ## Installation
+          
+          ```bash
+          go get github.com/xraph/go-utils@${{ inputs.version }}
+          ```
+          
+          Or for individual packages:
+          
+          ```bash
+          go get github.com/xraph/go-utils/errs@${{ inputs.version }}
+          go get github.com/xraph/go-utils/log@${{ inputs.version }}
+          ```
+          
+          ## Changes
+          
+          ${{ steps.changelog.outputs.PREV_TAG != '' && format('Changes since {0}:', steps.changelog.outputs.PREV_TAG) || 'Initial release:' }}
+          
+          ```
+          ${{ steps.changelog.outputs.CHANGELOG }}
+          ```
+          
+          ## Documentation
+          
+          - [README](https://github.com/xraph/go-utils/blob/${{ inputs.version }}/README.md)
+          - [errs Package](https://github.com/xraph/go-utils/blob/${{ inputs.version }}/errs/README.md)
+          - [Go Package Documentation](https://pkg.go.dev/github.com/xraph/go-utils@${{ inputs.version }})
+        draft: false
+        prerelease: ${{ contains(inputs.version, '-') }}
+    
+    - name: Trigger pkg.go.dev update
+      run: |
+        curl -sSf "https://proxy.golang.org/github.com/xraph/go-utils/@v/${{ inputs.version }}.info" || true
+        curl -sSf "https://proxy.golang.org/github.com/xraph/go-utils/errs/@v/${{ inputs.version }}.info" || true
+        curl -sSf "https://proxy.golang.org/github.com/xraph/go-utils/log/@v/${{ inputs.version }}.info" || true
+    
+    - name: Release Summary
+      run: |
+        echo "## ✅ Release ${{ inputs.version }} Created Successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag**: ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release**: [View on GitHub](https://github.com/${{ github.repository }}/releases/tag/${{ inputs.version }})" >> $GITHUB_STEP_SUMMARY
+        echo "- **Package**: [View on pkg.go.dev](https://pkg.go.dev/github.com/xraph/go-utils@${{ inputs.version }})" >> $GITHUB_STEP_SUMMARY
