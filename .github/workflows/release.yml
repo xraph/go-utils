@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-release-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-release-
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Run tests
+      run: make test
+    
+    - name: Run linters
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        make lint
+    
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -z "$PREV_TAG" ]; then
+          CHANGELOG=$(git log --oneline --decorate)
+        else
+          CHANGELOG=$(git log ${PREV_TAG}..HEAD --oneline --decorate)
+        fi
+        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        release_name: Release ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          # Release ${{ steps.get_version.outputs.VERSION }}
+          
+          ## Installation
+          
+          ```bash
+          go get github.com/xraph/go-utils@${{ steps.get_version.outputs.VERSION }}
+          ```
+          
+          Or for individual packages:
+          
+          ```bash
+          go get github.com/xraph/go-utils/errs@${{ steps.get_version.outputs.VERSION }}
+          go get github.com/xraph/go-utils/log@${{ steps.get_version.outputs.VERSION }}
+          ```
+          
+          ## Changes
+          
+          ```
+          ${{ steps.changelog.outputs.CHANGELOG }}
+          ```
+          
+          ## Documentation
+          
+          - [README](https://github.com/xraph/go-utils/blob/${{ steps.get_version.outputs.VERSION }}/README.md)
+          - [errs Package](https://github.com/xraph/go-utils/blob/${{ steps.get_version.outputs.VERSION }}/errs/README.md)
+          - [Go Package Documentation](https://pkg.go.dev/github.com/xraph/go-utils@${{ steps.get_version.outputs.VERSION }})
+        draft: false
+        prerelease: false
+
+  notify:
+    name: Notify Release
+    needs: release
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+    - name: Get version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
+    - name: Trigger pkg.go.dev update
+      run: |
+        curl -sSf "https://proxy.golang.org/github.com/xraph/go-utils/@v/${{ steps.get_version.outputs.VERSION }}.info" || true
+        curl -sSf "https://proxy.golang.org/github.com/xraph/go-utils/errs/@v/${{ steps.get_version.outputs.VERSION }}.info" || true
+        curl -sSf "https://proxy.golang.org/github.com/xraph/go-utils/log/@v/${{ steps.get_version.outputs.VERSION }}.info" || true
