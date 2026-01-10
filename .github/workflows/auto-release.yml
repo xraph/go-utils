@@ -89,10 +89,48 @@ jobs:
         # Also output previous tag for release notes
         echo "PREV_TAG=$PREV_TAG" >> $GITHUB_OUTPUT
     
+    - name: Create CHANGELOG.md
+      run: |
+        VERSION="${{ inputs.version }}"
+        PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        DATE=$(date +%Y-%m-%d)
+        
+        # Create new changelog entry
+        {
+          echo "# Changelog"
+          echo ""
+          echo "All notable changes to this project will be documented in this file."
+          echo ""
+          echo "## [$VERSION] - $DATE"
+          echo ""
+          if [ -z "$PREV_TAG" ]; then
+            echo "### Initial Release"
+            echo ""
+            git log --oneline --decorate | sed 's/^/- /'
+          else
+            echo "### Changes since $PREV_TAG"
+            echo ""
+            git log ${PREV_TAG}..HEAD --oneline --decorate | sed 's/^/- /'
+          fi
+          echo ""
+          
+          # Append existing changelog if it exists
+          if [ -f CHANGELOG.md ]; then
+            tail -n +2 CHANGELOG.md
+          fi
+        } > CHANGELOG.md.new
+        
+        mv CHANGELOG.md.new CHANGELOG.md
+    
     - name: Configure Git
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - name: Commit CHANGELOG.md
+      run: |
+        git add CHANGELOG.md
+        git commit -m "chore: Update CHANGELOG.md for ${{ inputs.version }}"
     
     - name: Create and push tag
       run: |
@@ -105,6 +143,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         tag: ${{ inputs.version }}
         name: Release ${{ inputs.version }}
+        artifacts: "CHANGELOG.md"
         body: |
           # Release ${{ inputs.version }}
           

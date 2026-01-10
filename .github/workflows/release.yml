@@ -63,12 +63,35 @@ jobs:
         echo "$CHANGELOG" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
     
+    - name: Create CHANGELOG.md for release
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/}"
+        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        DATE=$(date +%Y-%m-%d)
+        
+        {
+          echo "# Changelog for $VERSION"
+          echo ""
+          echo "Released: $DATE"
+          echo ""
+          if [ -z "$PREV_TAG" ]; then
+            echo "## Initial Release"
+            echo ""
+            git log --oneline --decorate | sed 's/^/- /'
+          else
+            echo "## Changes since $PREV_TAG"
+            echo ""
+            git log ${PREV_TAG}..HEAD --oneline --decorate | sed 's/^/- /'
+          fi
+        } > CHANGELOG-$VERSION.md
+    
     - name: Create Release
       uses: ncipollo/release-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         tag: ${{ steps.get_version.outputs.VERSION }}
         name: Release ${{ steps.get_version.outputs.VERSION }}
+        artifacts: "CHANGELOG-${{ steps.get_version.outputs.VERSION }}.md"
         body: |
           # Release ${{ steps.get_version.outputs.VERSION }}
           
