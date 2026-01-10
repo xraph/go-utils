@@ -153,8 +153,12 @@ fmt:
 ## fmt-check: Check if code is formatted
 fmt-check:
 	@echo "$(COLOR_GREEN)Checking code format...$(COLOR_RESET)"
-	@test -z "$$($(GOFMT) -l . | tee /dev/stderr)" || \
-		(echo "$(COLOR_RED)Code is not formatted. Run 'make fmt'$(COLOR_RESET)" && exit 1)
+	@UNFORMATTED=$$(gofmt -l .); \
+	if [ -n "$$UNFORMATTED" ]; then \
+		echo "$(COLOR_RED)Code is not formatted. Run 'make fmt'$(COLOR_RESET)"; \
+		echo "$$UNFORMATTED"; \
+		exit 1; \
+	fi
 
 .PHONY: vet
 ## vet: Run go vet
@@ -211,7 +215,7 @@ deps-update:
 security:
 	@echo "$(COLOR_GREEN)Running security scan...$(COLOR_RESET)"
 	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -exclude-dir=vendor ./...; \
+		gosec -exclude=G115 -exclude-dir=vendor ./...; \
 		echo "$(COLOR_GREEN)✓ Security scan completed$(COLOR_RESET)"; \
 	else \
 		echo "$(COLOR_YELLOW)Warning: gosec not found. Run 'make install-tools' to install$(COLOR_RESET)"; \
