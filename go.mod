@@ -1,6 +1,6 @@
 module github.com/xraph/go-utils
 
-go 1.25.0
+go 1.24.0
 
 require go.uber.org/zap v1.27.1
 
