@@ -41,9 +41,10 @@ jobs:
       run: make test
     
     - name: Run linters
-      run: |
-        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-        make lint
+      uses: golangci/golangci-lint-action@v9
+      with:
+        version: v2.6.1
+        args: --timeout=5m
     
     - name: Get version from tag
       id: get_version
