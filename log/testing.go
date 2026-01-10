@@ -152,7 +152,7 @@ func (tl *TestLogger) Sync() error {
 	return nil
 }
 
-// AssertLogs checks if expected logs were recorded (only works with TestLogger).
+// AssertHasLog checks if expected logs were recorded (only works with TestLogger).
 func (tl *TestLogger) AssertHasLog(level, message string) bool {
 	tl.mu.RLock()
 	defer tl.mu.RUnlock()

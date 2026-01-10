@@ -131,7 +131,7 @@ func Example_interfaceUsage() {
 	}
 
 	// Use ContextualError interface
-	if contextualErr, ok := err.(ContextualError); ok {
+	if contextualErr, ok := err.(ContextualError); ok { //nolint:staticcheck // demonstrating interface usage
 		ctx := contextualErr.GetContext()
 		fmt.Printf("Context: %v\n", ctx["user_id"])
 	}

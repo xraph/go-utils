@@ -32,25 +32,25 @@ func (f ZapField) Value() any {
 	case zapcore.Int64Type:
 		return f.zapField.Integer
 	case zapcore.Int32Type:
-		return int32(f.zapField.Integer)
+		return int32(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Int16Type:
-		return int16(f.zapField.Integer)
+		return int16(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Int8Type:
-		return int8(f.zapField.Integer)
+		return int8(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Uint64Type:
-		return uint64(f.zapField.Integer)
+		return uint64(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Uint32Type:
-		return uint32(f.zapField.Integer)
+		return uint32(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Uint16Type:
-		return uint16(f.zapField.Integer)
+		return uint16(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Uint8Type:
-		return uint8(f.zapField.Integer)
+		return uint8(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.UintptrType:
 		return uintptr(f.zapField.Integer)
 	case zapcore.Float64Type:
-		return math.Float64frombits(uint64(f.zapField.Integer))
+		return math.Float64frombits(uint64(f.zapField.Integer)) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Float32Type:
-		return math.Float32frombits(uint32(f.zapField.Integer))
+		return math.Float32frombits(uint32(f.zapField.Integer)) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.BoolType:
 		return f.zapField.Integer == 1
 	case zapcore.TimeType:
@@ -141,7 +141,7 @@ func (f LazyField) ZapField() zap.Field {
 
 // Enhanced field constructors that return wrapped fields.
 var (
-	// Basic type constructors.
+	// String creates a string field.
 	String = func(key, val string) Field {
 		return ZapField{zap.String(key, val)}
 	}
@@ -212,7 +212,7 @@ var (
 		return ZapField{zap.Error(err)}
 	}
 
-	// Advanced constructors.
+	// Stringer creates a field from a fmt.Stringer.
 	Stringer = func(key string, val fmt.Stringer) Field {
 		return ZapField{zap.Stringer(key, val)}
 	}
@@ -264,7 +264,7 @@ var (
 
 // Additional utility field constructors.
 var (
-	// HTTP-related fields.
+	// HTTPMethod creates an HTTP method field.
 	HTTPMethod = func(method string) Field {
 		return String("http.method", method)
 	}
@@ -289,7 +289,7 @@ var (
 		return String("http.user_agent", userAgent)
 	}
 
-	// Database-related fields.
+	// DatabaseQuery creates a database query field.
 	DatabaseQuery = func(query string) Field {
 		return String("db.query", query)
 	}
@@ -302,7 +302,7 @@ var (
 		return Int64("db.rows", rows)
 	}
 
-	// Service-related fields.
+	// ServiceName creates a service name field.
 	ServiceName = func(name string) Field {
 		return String("service.name", name)
 	}
@@ -315,7 +315,7 @@ var (
 		return String("service.environment", env)
 	}
 
-	// Performance-related fields.
+	// LatencyMs creates a latency field in milliseconds.
 	LatencyMs = func(latency time.Duration) Field {
 		return Float64("latency.ms", float64(latency.Nanoseconds())/1e6)
 	}
@@ -354,7 +354,7 @@ var (
 
 // Context-aware field constructors.
 var (
-	// Request context fields.
+	// RequestID creates a request ID field from context.
 	RequestID = func(ctx context.Context) Field {
 		if id := RequestIDFromContext(ctx); id != "" {
 			return String("request_id", id)
@@ -379,7 +379,7 @@ var (
 		return nil
 	}
 
-	// Combined context fields.
+	// ContextFields extracts all context fields from the given context.
 	ContextFields = func(ctx context.Context) []Field {
 		var fields []Field
 		if id := RequestIDFromContext(ctx); id != "" {

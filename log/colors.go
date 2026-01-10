@@ -5,13 +5,13 @@ const (
 	// Reset and basic colors.
 	Reset = "\033[0m"
 
-	// Text styles.
+	// Bold makes text bold.
 	Bold      = "\033[1m"
 	Dim       = "\033[2m"
 	Italic    = "\033[3m"
 	Underline = "\033[4m"
 
-	// Foreground colors.
+	// Black is the foreground color black.
 	Black   = "\033[30m"
 	Red     = "\033[31m"
 	Green   = "\033[32m"
@@ -21,7 +21,7 @@ const (
 	Cyan    = "\033[36m"
 	White   = "\033[37m"
 
-	// Bright foreground colors.
+	// BrightBlack is the bright foreground color black.
 	BrightBlack   = "\033[90m"
 	BrightRed     = "\033[91m"
 	BrightGreen   = "\033[92m"
@@ -31,7 +31,7 @@ const (
 	BrightCyan    = "\033[96m"
 	BrightWhite   = "\033[97m"
 
-	// Background colors.
+	// BgBlack is the background color black.
 	BgBlack   = "\033[40m"
 	BgRed     = "\033[41m"
 	BgGreen   = "\033[42m"

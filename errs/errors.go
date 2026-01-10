@@ -50,7 +50,7 @@ type CausedError interface {
 // Error code constants for structured errors.
 // These are generic codes that can be extended in consuming packages.
 const (
-	// Generic error codes.
+	// CodeInternal represents an internal error.
 	CodeInternal         = "INTERNAL_ERROR"
 	CodeValidation       = "VALIDATION_ERROR"
 	CodeNotFound         = "NOT_FOUND"

@@ -400,6 +400,7 @@ func ExampleIs() {
 	if IsNotFound(err) {
 		// Handle not found
 	}
+	// Output:
 }
 
 // Example showing error unwrapping.
@@ -407,6 +408,7 @@ func ExampleAs() {
 	// Create a wrapped error
 	innerErr := BadRequest("invalid input")
 	wrappedErr := ErrInternal("operation failed", innerErr.(error))
+	_ = wrappedErr
 
 	// Extract the HTTPError interface from the chain
 	var httpErr HTTPError
@@ -415,4 +417,5 @@ func ExampleAs() {
 		statusCode := httpErr.StatusCode()
 		_ = statusCode
 	}
+	// Output:
 }

@@ -150,11 +150,13 @@ func enhancedTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 // enhancedDurationEncoder formats durations with performance-based coloring.
 func enhancedDurationEncoder(d time.Duration, enc zapcore.PrimitiveArrayEncoder) {
 	var color string
-	if d > time.Second {
+
+	switch {
+	case d > time.Second:
 		color = Red // Slow
-	} else if d > 100*time.Millisecond {
+	case d > 100*time.Millisecond:
 		color = Yellow // Moderate
-	} else {
+	default:
 		color = Green // Fast
 	}
 
@@ -227,25 +229,20 @@ func (w *ColoredWriteSyncer) Write(p []byte) (n int, err error) {
 	// Look for level strings in the content
 	for i := range len(content) - 6 {
 		if content[i] == '[' || (i > 0 && content[i-1] == ' ') {
-			if i+5 < len(content) && content[i:i+5] == "DEBUG" {
+			switch {
+			case i+5 < len(content) && content[i:i+5] == "DEBUG":
 				colorCode = Cyan
-
-				break
-			} else if i+4 < len(content) && content[i:i+4] == "INFO" {
+			case i+4 < len(content) && content[i:i+4] == "INFO":
 				colorCode = Green
-
-				break
-			} else if i+4 < len(content) && content[i:i+4] == "WARN" {
+			case i+4 < len(content) && content[i:i+4] == "WARN":
 				colorCode = Yellow
-
-				break
-			} else if i+5 < len(content) && content[i:i+5] == "ERROR" {
+			case i+5 < len(content) && content[i:i+5] == "ERROR":
 				colorCode = Red
-
-				break
-			} else if i+5 < len(content) && content[i:i+5] == "FATAL" {
+			case i+5 < len(content) && content[i:i+5] == "FATAL":
 				colorCode = Magenta
+			}
 
+			if colorCode != "" {
 				break
 			}
 		}
@@ -415,21 +412,21 @@ func TrackWithFields(ctx context.Context, name string, fields ...Field) func() {
 
 	return func() {
 		duration := time.Since(start)
-		allFields := append(fields,
+		fields = append(fields,
 			String("function", name),
 			Duration("duration", duration),
 		)
-		logger.Debug("Function execution completed", allFields...)
+		logger.Debug("Function execution completed", fields...)
 	}
 }
 
 // LogPanicWithFields logs a panic with additional fields.
 func LogPanicWithFields(logger Logger, recovered any, fields ...Field) {
-	allFields := append(fields,
+	fields = append(fields,
 		Any("panic", recovered),
 		Stack("stacktrace"),
 	)
-	logger.Error("Panic recovered", allFields...)
+	logger.Error("Panic recovered", fields...)
 }
 
 // HTTPRequestLogger creates a logger with HTTP request fields.
@@ -633,8 +630,8 @@ func ConditionalLog(condition bool, logger Logger, level string, msg string, fie
 // Must wraps a function call and logs any error fatally.
 func Must(err error, logger Logger, msg string, fields ...Field) {
 	if err != nil {
-		allFields := append(fields, Error(err))
-		logger.Fatal(msg, allFields...)
+		fields = append(fields, Error(err))
+		logger.Fatal(msg, fields...)
 	}
 }
 
@@ -665,8 +662,8 @@ func (eh *ErrorHandler) Handle(err error, msg string, fields ...Field) {
 		return
 	}
 
-	allFields := append(fields, Error(err))
-	eh.logger.Error(msg, allFields...)
+	fields = append(fields, Error(err))
+	eh.logger.Error(msg, fields...)
 
 	if eh.callback != nil {
 		eh.callback(err)
@@ -679,19 +676,19 @@ func (eh *ErrorHandler) HandleWithLevel(err error, level string, msg string, fie
 		return
 	}
 
-	allFields := append(fields, Error(err))
+	fields = append(fields, Error(err))
 
 	switch strings.ToLower(level) {
 	case "debug":
-		eh.logger.Debug(msg, allFields...)
+		eh.logger.Debug(msg, fields...)
 	case "info":
-		eh.logger.Info(msg, allFields...)
+		eh.logger.Info(msg, fields...)
 	case "warn", "warning":
-		eh.logger.Warn(msg, allFields...)
+		eh.logger.Warn(msg, fields...)
 	case "error":
-		eh.logger.Error(msg, allFields...)
+		eh.logger.Error(msg, fields...)
 	case "fatal":
-		eh.logger.Fatal(msg, allFields...)
+		eh.logger.Fatal(msg, fields...)
 	}
 
 	if eh.callback != nil {

@@ -37,28 +37,29 @@ func (pm *PerformanceMonitor) WithFields(fields ...Field) *PerformanceMonitor {
 // Finish logs the completion of the monitored operation.
 func (pm *PerformanceMonitor) Finish() {
 	duration := time.Since(pm.start)
-	allFields := append(pm.fields,
+	pm.fields = append(pm.fields,
 		Duration("duration", duration),
 		LatencyMs(duration),
 	)
 
 	// Log at different levels based on duration
-	if duration > 5*time.Second {
-		pm.logger.Warn("Operation completed with high latency", allFields...)
-	} else if duration > 1*time.Second {
-		pm.logger.Info("Operation completed with moderate latency", allFields...)
-	} else {
-		pm.logger.Debug("Operation completed", allFields...)
+	switch {
+	case duration > 5*time.Second:
+		pm.logger.Warn("Operation completed with high latency", pm.fields...)
+	case duration > 1*time.Second:
+		pm.logger.Info("Operation completed with moderate latency", pm.fields...)
+	default:
+		pm.logger.Debug("Operation completed", pm.fields...)
 	}
 }
 
 // FinishWithError logs the completion of the monitored operation with an error.
 func (pm *PerformanceMonitor) FinishWithError(err error) {
 	duration := time.Since(pm.start)
-	allFields := append(pm.fields,
+	pm.fields = append(pm.fields,
 		Duration("duration", duration),
 		LatencyMs(duration),
 		Error(err),
 	)
-	pm.logger.Error("Operation failed", allFields...)
+	pm.logger.Error("Operation failed", pm.fields...)
 }
