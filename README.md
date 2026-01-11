@@ -1,11 +1,11 @@
 # go-utils
 
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/xraph/go-utils)](https://goreportcard.com/report/github.com/xraph/go-utils)
 [![CI](https://github.com/xraph/go-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/xraph/go-utils/actions/workflows/ci.yml)
 
-A collection of production-ready Go utilities for building robust applications with clean error handling and structured logging.
+A comprehensive collection of production-ready Go utilities for building robust applications with clean error handling, structured logging, dependency injection, HTTP request handling, validation, and metrics.
 
 ## Packages
 
@@ -93,6 +93,198 @@ prodLogger.Error("Database connection failed",
 
 ---
 
+### 📦 [di](./di) - Dependency Injection
+
+Lightweight dependency injection container with lifecycle management, scopes, and service health checks.
+
+**Key Features:**
+- ✅ Interface-based container design
+- ✅ Service lifecycle management (Register, Start, Stop)
+- ✅ Scoped services for request-level dependencies
+- ✅ Dependency graph resolution with cycle detection
+- ✅ Health check support for services
+- ✅ ResolveReady for dependency initialization
+- ✅ Zero reflection overhead after registration
+
+```go
+import "github.com/xraph/go-utils/di"
+
+// Create container
+container := di.NewContainer()
+
+// Register services
+container.Register("database", func(c di.Container) (any, error) {
+    return &Database{}, nil
+}, di.Singleton())
+
+container.Register("userService", func(c di.Container) (any, error) {
+    db, _ := c.Resolve("database")
+    return &UserService{DB: db.(*Database)}, nil
+}, di.Singleton())
+
+// Start all services
+ctx := context.Background()
+container.Start(ctx)
+
+// Resolve services
+svc, _ := container.Resolve("userService")
+userSvc := svc.(*UserService)
+
+// Create request scope
+scope := container.BeginScope()
+defer scope.End()
+```
+
+---
+
+### 📦 [http](./http) - HTTP Context & Request Handling
+
+Feature-rich HTTP context for request handling with parameter binding, validation, and response helpers.
+
+**Key Features:**
+- ✅ Type-safe request binding (path, query, header, body)
+- ✅ Integrated validation with go-playground/validator
+- ✅ Custom validation tags (format, minLength, pattern, etc.)
+- ✅ Fluent response API (JSON, XML, HTML, Stream)
+- ✅ Cookie and session management
+- ✅ DI container integration per request
+- ✅ Sensitive data masking for logs
+- ✅ Request/response metrics
+
+```go
+import "github.com/xraph/go-utils/http"
+
+type UserRequest struct {
+    ID    string `path:"id" validate:"required,uuid"`
+    Email string `json:"email" validate:"required,email"`
+    Age   int    `json:"age" validate:"gte=0,lte=120"`
+}
+
+func handler(ctx http.Context) error {
+    var req UserRequest
+    
+    // Bind and validate request
+    if err := ctx.BindRequest(&req); err != nil {
+        return ctx.Status(400).JSON(err)
+    }
+    
+    // Fluent response
+    return ctx.Status(200).JSON(map[string]any{
+        "message": "User created",
+        "user": req,
+    })
+}
+```
+
+**Validation Features:**
+- Hybrid validation: go-playground/validator + custom tags
+- Custom validators: `format`, `minLength`, `maxLength`, `pattern`, `enum`, `minimum`, `maximum`, `multipleOf`
+- Detailed error messages with field names and error codes
+- Support for nested structs and embedded fields
+
+---
+
+### 📦 [val](./val) - Validation Utilities
+
+Validation error handling and field validation helpers.
+
+**Key Features:**
+- ✅ ValidationError with structured field errors
+- ✅ HTTP error interface implementation (422 status)
+- ✅ Field requirement detection (required, optional, omitempty)
+- ✅ Format validation helpers (email, URL, UUID, ISO8601)
+- ✅ Field name extraction from struct tags
+- ✅ Type checking utilities
+
+```go
+import "github.com/xraph/go-utils/val"
+
+// Create validation error
+errors := &val.ValidationError{}
+
+// Add field errors with codes
+errors.AddWithCode("email", "must be a valid email", val.ErrCodeInvalidFormat, "not-an-email")
+errors.AddWithCode("age", "must be at least 18", val.ErrCodeMinValue, 15)
+
+// Check if field is required
+field, _ := reflect.TypeOf(User{}).FieldByName("Email")
+if val.IsFieldRequired(field) {
+    // Field is required
+}
+
+// Validate formats
+if !val.IsValidEmail("user@example.com") {
+    // Invalid email
+}
+
+if !val.IsValidUUID("123e4567-e89b-12d3-a456-426614174000") {
+    // Invalid UUID
+}
+
+// HTTP integration
+return ctx.Status(errors.StatusCode()).JSON(errors.ResponseBody())
+```
+
+**Error Codes:**
+- `ErrCodeRequired` - Field is required
+- `ErrCodeInvalidType` - Invalid field type
+- `ErrCodeInvalidFormat` - Invalid format
+- `ErrCodeMinLength`, `ErrCodeMaxLength` - Length constraints
+- `ErrCodeMinValue`, `ErrCodeMaxValue` - Numeric constraints
+- `ErrCodePattern` - Pattern mismatch
+- `ErrCodeEnum` - Invalid enum value
+
+---
+
+### 📦 [metrics](./metrics) - Application Metrics
+
+Metrics collection and health monitoring for services.
+
+**Key Features:**
+- ✅ Multiple metric types (Counter, Gauge, Histogram, Timer)
+- ✅ Export formats (Prometheus, JSON, InfluxDB, StatsD)
+- ✅ System and runtime metrics collection
+- ✅ HTTP metrics middleware integration
+- ✅ Health check management
+- ✅ Service health aggregation
+- ✅ Configurable collection intervals
+
+```go
+import "github.com/xraph/go-utils/metrics"
+
+// Create metrics collector
+m := metrics.NewMetrics(metrics.MetricsConfig{
+    Enabled: true,
+    Features: metrics.MetricsFeatures{
+        SystemMetrics:  true,
+        RuntimeMetrics: true,
+        HTTPMetrics:    true,
+    },
+})
+
+// Record metrics
+m.Increment("requests_total", map[string]string{
+    "method": "GET",
+    "path": "/api/users",
+})
+
+m.Gauge("active_connections", 42, nil)
+m.Histogram("request_duration_ms", 123.45, nil)
+
+// Health management
+health := metrics.NewHealthManager()
+health.RegisterCheck("database", func(ctx context.Context) error {
+    return db.Ping(ctx)
+})
+
+status := health.Check(ctx)
+if status.Status != "healthy" {
+    // Handle unhealthy state
+}
+```
+
+---
+
 ## Installation
 
 ```bash
@@ -102,15 +294,23 @@ go get github.com/xraph/go-utils
 Or install specific packages:
 
 ```bash
-go get github.com/xraph/go-utils/errs
-go get github.com/xraph/go-utils/log
+go get github.com/xraph/go-utils/errs    # Error handling
+go get github.com/xraph/go-utils/log     # Structured logging
+go get github.com/xraph/go-utils/di      # Dependency injection
+go get github.com/xraph/go-utils/http    # HTTP context & validation
+go get github.com/xraph/go-utils/val     # Validation utilities
+go get github.com/xraph/go-utils/metrics # Metrics & health checks
 ```
 
 ## Requirements
 
-- Go 1.25 or higher
-- No external dependencies for `errs` package
-- `go.uber.org/zap` for `log` package
+- Go 1.22 or higher (uses integer range loops)
+- **errs**: No external dependencies (standard library only)
+- **log**: `go.uber.org/zap` for structured logging
+- **di**: No external dependencies
+- **http**: `go-playground/validator` for validation
+- **val**: `google/uuid` for UUID validation
+- **metrics**: No external dependencies
 
 ## Quick Start
 
@@ -186,13 +386,85 @@ func main() {
     // Simulate work
     time.Sleep(100 * time.Millisecond)
     pm.Finish()
+}
+```
+
+### HTTP Request Handling Example
+
+```go
+package main
+
+import (
+    "github.com/xraph/go-utils/http"
+)
+
+type CreateUserRequest struct {
+    Name  string `json:"name" validate:"required,min=3,max=50"`
+    Email string `json:"email" validate:"required,email"`
+    Age   int    `json:"age" validate:"required,gte=18,lte=120"`
+    Role  string `json:"role" enum:"admin,user,guest"`
+}
+
+func CreateUserHandler(ctx http.Context) error {
+    var req CreateUserRequest
     
-    // Error logging with fields
-    logger.Error("Failed to connect",
-        log.String("host", "db.example.com"),
-        log.Int("port", 5432),
-        log.Error(err),
-    )
+    // Bind and validate in one step
+    if err := ctx.BindRequest(&req); err != nil {
+        return ctx.Status(400).JSON(err)
+    }
+    
+    // Process request...
+    user := createUser(req)
+    
+    // Return response
+    return ctx.Status(201).JSON(map[string]any{
+        "message": "User created successfully",
+        "user": user,
+    })
+}
+```
+
+### Dependency Injection Example
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/xraph/go-utils/di"
+)
+
+type Database struct{}
+func (d *Database) Start(ctx context.Context) error { return nil }
+func (d *Database) Stop(ctx context.Context) error { return nil }
+
+type UserService struct {
+    DB *Database
+}
+
+func main() {
+    container := di.NewContainer()
+    
+    // Register database
+    container.Register("database", func(c di.Container) (any, error) {
+        return &Database{}, nil
+    }, di.Singleton())
+    
+    // Register user service with dependency
+    container.Register("userService", func(c di.Container) (any, error) {
+        db, _ := c.Resolve("database")
+        return &UserService{DB: db.(*Database)}, nil
+    }, di.Singleton())
+    
+    // Start all services
+    ctx := context.Background()
+    container.Start(ctx)
+    defer container.Stop(ctx)
+    
+    // Use services
+    svc, _ := container.Resolve("userService")
+    userSvc := svc.(*UserService)
+    _ = userSvc
 }
 ```
 
@@ -255,6 +527,23 @@ go-utils/
 │   ├── structured.go  # Structured logging utilities
 │   ├── testing.go     # Test logger
 │   └── *_test.go      # Tests
+├── di/                # Dependency injection
+│   ├── di.go          # Container interfaces
+│   ├── dep.go         # Dependency resolution
+│   ├── service.go     # Service lifecycle
+│   └── di_opts.go     # Registration options
+├── http/              # HTTP context & validation
+│   ├── context.go     # HTTP context implementation
+│   ├── binder.go      # Request binding
+│   ├── validator.go   # Validation with go-playground
+│   ├── sensitive.go   # Sensitive data masking
+│   └── session.go     # Session management
+├── val/               # Validation utilities
+│   ├── validation.go  # ValidationError type
+│   └── helpers.go     # Validation helpers
+├── metrics/           # Metrics & health
+│   ├── metrics.go     # Metrics collection
+│   └── health.go      # Health checks
 ├── go.mod
 ├── go.sum
 ├── Makefile
@@ -266,6 +555,9 @@ go-utils/
 For detailed examples, see:
 - [errs package examples](./errs/examples_test.go)
 - [log package examples](./log/logger_test.go)
+- [di package examples](./di/di_test.go)
+- [http package examples](./http/binder_test.go)
+- [val package examples](./val/helpers_test.go)
 
 ## Contributing
 
@@ -286,15 +578,33 @@ MIT License - see [LICENSE](LICENSE) for details
 ## Related Projects
 
 - [uber-go/zap](https://github.com/uber-go/zap) - Blazing fast, structured logging
-- [pkg/errors](https://github.com/pkg/errors) - Simple error handling primitives
+- [go-playground/validator](https://github.com/go-playground/validator) - Go struct and field validation
+- [google/uuid](https://github.com/google/uuid) - UUID generation and parsing
+
+## Features by Package
+
+| Feature | errs | log | di | http | val | metrics |
+|---------|------|-----|----|----|-----|---------|
+| Zero Dependencies | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ |
+| HTTP Integration | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| Context Support | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Structured Data | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Testing Utilities | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Production Ready | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## Roadmap
 
-- [ ] Add metrics integration
+- [x] Error handling with context
+- [x] Structured logging
+- [x] Dependency injection
+- [x] HTTP request binding and validation
+- [x] Validation utilities
+- [x] Metrics and health checks
 - [ ] Add tracing support
 - [ ] Add retry utilities
-- [ ] Add validation helpers
-- [ ] Add HTTP middleware utilities
+- [ ] Add rate limiting
+- [ ] Add circuit breaker
+- [ ] Add caching utilities
 
 ---
 
