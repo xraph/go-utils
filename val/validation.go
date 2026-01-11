@@ -1,10 +1,16 @@
-package shared
+package val
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+)
+
+const (
+	// ValidationFailedMessage is the default error message for validation failures.
+	ValidationFailedMessage = "Validation failed"
 )
 
 // ValidationFieldError represents a single field validation error.
@@ -22,13 +28,17 @@ type ValidationError struct {
 
 // Error implements the error interface.
 func (ve *ValidationError) Error() string {
-	if len(ve.Errors) == 0 {
-		return "validation failed"
+	if ve == nil || len(ve.Errors) == 0 {
+		return ValidationFailedMessage
 	}
 
-	var messages []string
+	messages := make([]string, 0, len(ve.Errors))
 	for _, err := range ve.Errors {
-		messages = append(messages, fmt.Sprintf("%s: %s", err.Field, err.Message))
+		if err.Field != "" {
+			messages = append(messages, fmt.Sprintf("%s: %s", err.Field, err.Message))
+		} else {
+			messages = append(messages, err.Message)
+		}
 	}
 
 	return strings.Join(messages, "; ")
@@ -36,6 +46,10 @@ func (ve *ValidationError) Error() string {
 
 // Add adds a validation error.
 func (ve *ValidationError) Add(field, message string, value any) {
+	if ve == nil {
+		return
+	}
+
 	ve.Errors = append(ve.Errors, ValidationFieldError{
 		Field:   field,
 		Message: message,
@@ -45,6 +59,10 @@ func (ve *ValidationError) Add(field, message string, value any) {
 
 // AddWithCode adds a validation error with a code.
 func (ve *ValidationError) AddWithCode(field, message, code string, value any) {
+	if ve == nil {
+		return
+	}
+
 	ve.Errors = append(ve.Errors, ValidationFieldError{
 		Field:   field,
 		Message: message,
@@ -55,27 +73,36 @@ func (ve *ValidationError) AddWithCode(field, message, code string, value any) {
 
 // HasErrors returns true if there are validation errors.
 func (ve *ValidationError) HasErrors() bool {
-	return len(ve.Errors) > 0
+	return ve != nil && len(ve.Errors) > 0
 }
 
 // Count returns the number of validation errors.
 func (ve *ValidationError) Count() int {
+	if ve == nil {
+		return 0
+	}
+
 	return len(ve.Errors)
 }
 
-// ToJSON converts validation errors to JSON bytes.
-func (ve *ValidationError) ToJSON() ([]byte, error) {
+// MarshalJSON implements json.Marshaler for custom JSON serialization.
+func (ve *ValidationError) MarshalJSON() ([]byte, error) {
+	if ve == nil {
+		return json.Marshal(map[string]any{
+			"error":            ValidationFailedMessage,
+			"validationErrors": []ValidationFieldError{},
+		})
+	}
+
 	return json.Marshal(map[string]any{
-		"error":            "Validation failed",
+		"error":            ValidationFailedMessage,
 		"validationErrors": ve.Errors,
 	})
 }
 
 // NewValidationError creates a new ValidationError instance.
 func NewValidationError() *ValidationError {
-	return &ValidationError{
-		Errors: make([]ValidationFieldError, 0),
-	}
+	return &ValidationError{}
 }
 
 // StatusCode returns 422 Unprocessable Entity for validation errors (implements HTTPError interface).
@@ -83,12 +110,22 @@ func (ve *ValidationError) StatusCode() int {
 	return http.StatusUnprocessableEntity
 }
 
+// Unwrap returns nil since ValidationError doesn't wrap another error.
+func (ve *ValidationError) Unwrap() error {
+	return nil
+}
+
 // ResponseBody returns the response body (implements HTTPError interface).
 func (ve *ValidationError) ResponseBody() any {
+	errors := []ValidationFieldError{}
+	if ve != nil && ve.Errors != nil {
+		errors = ve.Errors
+	}
+
 	return map[string]any{
-		"error":            "Validation failed",
+		"error":            ValidationFailedMessage,
 		"code":             http.StatusUnprocessableEntity,
-		"validationErrors": ve.Errors,
+		"validationErrors": errors,
 	}
 }
 
@@ -99,16 +136,46 @@ func (ve *ValidationError) Headers() map[string]string {
 	}
 }
 
-// HTTPError returns the HTTP status code and response body.
-func (ve *ValidationError) HTTPError() (int, any) {
-	return ve.StatusCode(), ve.ResponseBody()
+// As attempts to convert the target error to *ValidationError.
+func (ve *ValidationError) As(target any) bool {
+	if t, ok := target.(**ValidationError); ok {
+		*t = ve
+
+		return true
+	}
+
+	return false
 }
 
-// Is checks if the target error is a ValidationError.
-func (ve *ValidationError) Is(target error) bool {
-	_, ok := target.(*ValidationError)
+// GetFieldErrors returns all errors for a specific field.
+func (ve *ValidationError) GetFieldErrors(field string) []ValidationFieldError {
+	if ve == nil {
+		return nil
+	}
 
-	return ok
+	var fieldErrors []ValidationFieldError
+
+	for _, err := range ve.Errors {
+		if err.Field == field {
+			fieldErrors = append(fieldErrors, err)
+		}
+	}
+
+	return fieldErrors
+}
+
+// HasFieldError checks if a specific field has validation errors.
+func (ve *ValidationError) HasFieldError(field string) bool {
+	return len(ve.GetFieldErrors(field)) > 0
+}
+
+// Merge combines errors from another ValidationError.
+func (ve *ValidationError) Merge(other *ValidationError) {
+	if ve == nil || other == nil {
+		return
+	}
+
+	ve.Errors = append(ve.Errors, other.Errors...)
 }
 
 // ValidationErrorResponse is the HTTP response for validation errors.
@@ -119,12 +186,24 @@ type ValidationErrorResponse struct {
 }
 
 // NewValidationErrorResponse creates a new validation error response.
-func NewValidationErrorResponse(errors *ValidationError) *ValidationErrorResponse {
-	return &ValidationErrorResponse{
-		Error:            "Validation failed",
-		Code:             http.StatusUnprocessableEntity,
-		ValidationErrors: errors.Errors,
+func NewValidationErrorResponse(ve *ValidationError) *ValidationErrorResponse {
+	validationErrors := []ValidationFieldError{}
+	if ve != nil && ve.Errors != nil {
+		validationErrors = ve.Errors
 	}
+
+	return &ValidationErrorResponse{
+		Error:            ValidationFailedMessage,
+		Code:             http.StatusUnprocessableEntity,
+		ValidationErrors: validationErrors,
+	}
+}
+
+// IsValidationError checks if an error is a ValidationError.
+func IsValidationError(err error) bool {
+	var ve *ValidationError
+
+	return errors.As(err, &ve)
 }
 
 // Common validation error codes.
