@@ -62,4 +62,3 @@ func TestExternalPackageCanUseHealthMocks(t *testing.T) {
 		t.Errorf("expected 1 Check call, got %d", mock.CheckCalls)
 	}
 }
-
