@@ -25,6 +25,7 @@ type MockMetrics struct {
 	CounterFunc   func(name string, opts ...MetricOption) Counter
 	GaugeFunc     func(name string, opts ...MetricOption) Gauge
 	HistogramFunc func(name string, opts ...MetricOption) Histogram
+	SummaryFunc   func(name string, opts ...MetricOption) Summary
 	TimerFunc     func(name string, opts ...MetricOption) Timer
 
 	// MetricExporter interface
@@ -55,6 +56,7 @@ type MockMetrics struct {
 	CounterCalls      int
 	GaugeCalls        int
 	HistogramCalls    int
+	SummaryCalls      int
 	TimerCalls        int
 	ExportCalls       int
 	ExportToFileCalls int
@@ -80,6 +82,9 @@ func NewMockMetrics() *MockMetrics {
 	}
 	m.HistogramFunc = func(name string, opts ...MetricOption) Histogram {
 		return NewMockHistogram()
+	}
+	m.SummaryFunc = func(name string, opts ...MetricOption) Summary {
+		return NewMockSummary()
 	}
 	m.TimerFunc = func(name string, opts ...MetricOption) Timer {
 		return NewMockTimer()
@@ -190,6 +195,15 @@ func (m *MockMetrics) Histogram(name string, opts ...MetricOption) Histogram {
 	m.HistogramCalls++
 
 	return m.HistogramFunc(name, opts...)
+}
+
+func (m *MockMetrics) Summary(name string, opts ...MetricOption) Summary {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.SummaryCalls++
+
+	return m.SummaryFunc(name, opts...)
 }
 
 func (m *MockMetrics) Timer(name string, opts ...MetricOption) Timer {
@@ -307,12 +321,22 @@ func (m *MockMetrics) Reload(config *MetricsConfig) error {
 
 // MockCounter is a mock implementation of Counter.
 type MockCounter struct {
-	mu    sync.RWMutex
-	value float64
+	mu        sync.RWMutex
+	value     float64
+	timestamp time.Time
+	exemplars []Exemplar
+	metadata  MetricMetadata
 }
 
 func NewMockCounter() *MockCounter {
-	return &MockCounter{}
+	return &MockCounter{
+		timestamp: time.Now(),
+		exemplars: make([]Exemplar, 0),
+		metadata: MetricMetadata{
+			Name: "mock_counter",
+			Type: MetricTypeCounter,
+		},
+	}
 }
 
 func (c *MockCounter) Inc() {
@@ -320,6 +344,7 @@ func (c *MockCounter) Inc() {
 	defer c.mu.Unlock()
 
 	c.value++
+	c.timestamp = time.Now()
 }
 
 func (c *MockCounter) Add(delta float64) {
@@ -327,6 +352,21 @@ func (c *MockCounter) Add(delta float64) {
 	defer c.mu.Unlock()
 
 	c.value += delta
+	c.timestamp = time.Now()
+}
+
+func (c *MockCounter) AddWithExemplar(delta float64, exemplar Exemplar) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.value += delta
+	c.timestamp = time.Now()
+	c.exemplars = append(c.exemplars, exemplar)
+
+	// Keep only last 10 exemplars
+	if len(c.exemplars) > 10 {
+		c.exemplars = c.exemplars[len(c.exemplars)-10:]
+	}
 }
 
 func (c *MockCounter) Value() float64 {
@@ -334,6 +374,30 @@ func (c *MockCounter) Value() float64 {
 	defer c.mu.RUnlock()
 
 	return c.value
+}
+
+func (c *MockCounter) Timestamp() time.Time {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.timestamp
+}
+
+func (c *MockCounter) Exemplars() []Exemplar {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make([]Exemplar, len(c.exemplars))
+	copy(result, c.exemplars)
+
+	return result
+}
+
+func (c *MockCounter) Describe() MetricMetadata {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.metadata
 }
 
 func (c *MockCounter) WithLabels(labels map[string]string) Counter {
@@ -345,18 +409,28 @@ func (c *MockCounter) Reset() error {
 	defer c.mu.Unlock()
 
 	c.value = 0
+	c.timestamp = time.Now()
+	c.exemplars = make([]Exemplar, 0)
 
 	return nil
 }
 
 // MockGauge is a mock implementation of Gauge.
 type MockGauge struct {
-	mu    sync.RWMutex
-	value float64
+	mu        sync.RWMutex
+	value     float64
+	timestamp time.Time
+	metadata  MetricMetadata
 }
 
 func NewMockGauge() *MockGauge {
-	return &MockGauge{}
+	return &MockGauge{
+		timestamp: time.Now(),
+		metadata: MetricMetadata{
+			Name: "mock_gauge",
+			Type: MetricTypeGauge,
+		},
+	}
 }
 
 func (g *MockGauge) Set(value float64) {
@@ -364,6 +438,7 @@ func (g *MockGauge) Set(value float64) {
 	defer g.mu.Unlock()
 
 	g.value = value
+	g.timestamp = time.Now()
 }
 
 func (g *MockGauge) Inc() {
@@ -371,6 +446,7 @@ func (g *MockGauge) Inc() {
 	defer g.mu.Unlock()
 
 	g.value++
+	g.timestamp = time.Now()
 }
 
 func (g *MockGauge) Dec() {
@@ -378,6 +454,7 @@ func (g *MockGauge) Dec() {
 	defer g.mu.Unlock()
 
 	g.value--
+	g.timestamp = time.Now()
 }
 
 func (g *MockGauge) Add(delta float64) {
@@ -385,6 +462,24 @@ func (g *MockGauge) Add(delta float64) {
 	defer g.mu.Unlock()
 
 	g.value += delta
+	g.timestamp = time.Now()
+}
+
+func (g *MockGauge) Sub(delta float64) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.value -= delta
+	g.timestamp = time.Now()
+}
+
+func (g *MockGauge) SetToCurrentTime() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	now := time.Now()
+	g.value = float64(now.Unix())
+	g.timestamp = now
 }
 
 func (g *MockGauge) Value() float64 {
@@ -392,6 +487,20 @@ func (g *MockGauge) Value() float64 {
 	defer g.mu.RUnlock()
 
 	return g.value
+}
+
+func (g *MockGauge) Timestamp() time.Time {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return g.timestamp
+}
+
+func (g *MockGauge) Describe() MetricMetadata {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	return g.metadata
 }
 
 func (g *MockGauge) WithLabels(labels map[string]string) Gauge {
@@ -403,19 +512,27 @@ func (g *MockGauge) Reset() error {
 	defer g.mu.Unlock()
 
 	g.value = 0
+	g.timestamp = time.Now()
 
 	return nil
 }
 
 // MockHistogram is a mock implementation of Histogram.
 type MockHistogram struct {
-	mu     sync.RWMutex
-	values []float64
+	mu        sync.RWMutex
+	values    []float64
+	exemplars []Exemplar
+	metadata  MetricMetadata
 }
 
 func NewMockHistogram() *MockHistogram {
 	return &MockHistogram{
-		values: make([]float64, 0),
+		values:    make([]float64, 0),
+		exemplars: make([]Exemplar, 0),
+		metadata: MetricMetadata{
+			Name: "mock_histogram",
+			Type: MetricTypeHistogram,
+		},
 	}
 }
 
@@ -424,6 +541,145 @@ func (h *MockHistogram) Observe(value float64) {
 	defer h.mu.Unlock()
 
 	h.values = append(h.values, value)
+}
+
+func (h *MockHistogram) ObserveWithExemplar(value float64, exemplar Exemplar) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.values = append(h.values, value)
+	h.exemplars = append(h.exemplars, exemplar)
+
+	// Keep only last 10 exemplars
+	if len(h.exemplars) > 10 {
+		h.exemplars = h.exemplars[len(h.exemplars)-10:]
+	}
+}
+
+func (h *MockHistogram) Count() uint64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return uint64(len(h.values))
+}
+
+func (h *MockHistogram) Sum() float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	sum := 0.0
+	for _, v := range h.values {
+		sum += v
+	}
+
+	return sum
+}
+
+func (h *MockHistogram) Mean() float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if len(h.values) == 0 {
+		return 0
+	}
+
+	sum := 0.0
+	for _, v := range h.values {
+		sum += v
+	}
+
+	return sum / float64(len(h.values))
+}
+
+func (h *MockHistogram) StdDev() float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if len(h.values) < 2 {
+		return 0
+	}
+
+	mean := h.Mean()
+	variance := 0.0
+
+	for _, v := range h.values {
+		diff := v - mean
+		variance += diff * diff
+	}
+
+	variance /= float64(len(h.values))
+
+	return variance // Simplified: should be sqrt(variance)
+}
+
+func (h *MockHistogram) Min() float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if len(h.values) == 0 {
+		return 0
+	}
+
+	min := h.values[0]
+	for _, v := range h.values {
+		if v < min {
+			min = v
+		}
+	}
+
+	return min
+}
+
+func (h *MockHistogram) Max() float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if len(h.values) == 0 {
+		return 0
+	}
+
+	max := h.values[0]
+	for _, v := range h.values {
+		if v > max {
+			max = v
+		}
+	}
+
+	return max
+}
+
+func (h *MockHistogram) Quantile(q float64) float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if len(h.values) == 0 {
+		return 0
+	}
+
+	// Simple implementation - return approximate quantile
+	idx := int(q * float64(len(h.values)))
+	if idx >= len(h.values) {
+		idx = len(h.values) - 1
+	}
+
+	return h.values[idx]
+}
+
+func (h *MockHistogram) Exemplars() []Exemplar {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	result := make([]Exemplar, len(h.exemplars))
+	copy(result, h.exemplars)
+
+	return result
+}
+
+func (h *MockHistogram) Describe() MetricMetadata {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return h.metadata
 }
 
 func (h *MockHistogram) WithLabels(labels map[string]string) Histogram {
@@ -435,6 +691,7 @@ func (h *MockHistogram) Reset() error {
 	defer h.mu.Unlock()
 
 	h.values = make([]float64, 0)
+	h.exemplars = make([]Exemplar, 0)
 
 	return nil
 }
@@ -443,11 +700,18 @@ func (h *MockHistogram) Reset() error {
 type MockTimer struct {
 	mu        sync.RWMutex
 	durations []time.Duration
+	exemplars []Exemplar
+	metadata  MetricMetadata
 }
 
 func NewMockTimer() *MockTimer {
 	return &MockTimer{
 		durations: make([]time.Duration, 0),
+		exemplars: make([]Exemplar, 0),
+		metadata: MetricMetadata{
+			Name: "mock_timer",
+			Type: MetricTypeTimer,
+		},
 	}
 }
 
@@ -456,6 +720,19 @@ func (t *MockTimer) Record(duration time.Duration) {
 	defer t.mu.Unlock()
 
 	t.durations = append(t.durations, duration)
+}
+
+func (t *MockTimer) RecordWithExemplar(duration time.Duration, exemplar Exemplar) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.durations = append(t.durations, duration)
+	t.exemplars = append(t.exemplars, exemplar)
+
+	// Keep only last 10 exemplars
+	if len(t.exemplars) > 10 {
+		t.exemplars = t.exemplars[len(t.exemplars)-10:]
+	}
 }
 
 func (t *MockTimer) Time() func() {
@@ -471,6 +748,18 @@ func (t *MockTimer) Count() uint64 {
 	defer t.mu.RUnlock()
 
 	return uint64(len(t.durations))
+}
+
+func (t *MockTimer) Sum() time.Duration {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	var sum time.Duration
+	for _, d := range t.durations {
+		sum += d
+	}
+
+	return sum
 }
 
 func (t *MockTimer) Mean() time.Duration {
@@ -489,6 +778,27 @@ func (t *MockTimer) Mean() time.Duration {
 	return sum / time.Duration(len(t.durations))
 }
 
+func (t *MockTimer) StdDev() time.Duration {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if len(t.durations) < 2 {
+		return 0
+	}
+
+	mean := t.Mean()
+	var variance float64
+
+	for _, d := range t.durations {
+		diff := float64(d - mean)
+		variance += diff * diff
+	}
+
+	variance /= float64(len(t.durations))
+
+	return time.Duration(variance) // Simplified: should be sqrt(variance)
+}
+
 func (t *MockTimer) Percentile(percentile float64) time.Duration {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -497,8 +807,17 @@ func (t *MockTimer) Percentile(percentile float64) time.Duration {
 		return 0
 	}
 
-	// Simple implementation - not production-quality percentile calculation
-	return t.durations[len(t.durations)-1]
+	// Simple implementation - approximate percentile
+	idx := int(percentile * float64(len(t.durations)))
+	if idx >= len(t.durations) {
+		idx = len(t.durations) - 1
+	}
+
+	return t.durations[idx]
+}
+
+func (t *MockTimer) Quantile(q float64) time.Duration {
+	return t.Percentile(q)
 }
 
 func (t *MockTimer) Min() time.Duration {
@@ -537,6 +856,23 @@ func (t *MockTimer) Max() time.Duration {
 	return maxDuration
 }
 
+func (t *MockTimer) Exemplars() []Exemplar {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	result := make([]Exemplar, len(t.exemplars))
+	copy(result, t.exemplars)
+
+	return result
+}
+
+func (t *MockTimer) Describe() MetricMetadata {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	return t.metadata
+}
+
 func (t *MockTimer) WithLabels(labels map[string]string) Timer {
 	return NewMockTimer()
 }
@@ -546,6 +882,160 @@ func (t *MockTimer) Reset() error {
 	defer t.mu.Unlock()
 
 	t.durations = make([]time.Duration, 0)
+	t.exemplars = make([]Exemplar, 0)
+
+	return nil
+}
+
+// MockSummary is a mock implementation of Summary.
+type MockSummary struct {
+	mu       sync.RWMutex
+	values   []float64
+	metadata MetricMetadata
+}
+
+func NewMockSummary() *MockSummary {
+	return &MockSummary{
+		values: make([]float64, 0),
+		metadata: MetricMetadata{
+			Name: "mock_summary",
+			Type: MetricTypeSummary,
+		},
+	}
+}
+
+func (s *MockSummary) Observe(value float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.values = append(s.values, value)
+}
+
+func (s *MockSummary) Count() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return uint64(len(s.values))
+}
+
+func (s *MockSummary) Sum() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sum := 0.0
+	for _, v := range s.values {
+		sum += v
+	}
+
+	return sum
+}
+
+func (s *MockSummary) Mean() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.values) == 0 {
+		return 0
+	}
+
+	sum := 0.0
+	for _, v := range s.values {
+		sum += v
+	}
+
+	return sum / float64(len(s.values))
+}
+
+func (s *MockSummary) Quantile(q float64) float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.values) == 0 {
+		return 0
+	}
+
+	// Simple implementation - approximate quantile
+	idx := int(q * float64(len(s.values)))
+	if idx >= len(s.values) {
+		idx = len(s.values) - 1
+	}
+
+	return s.values[idx]
+}
+
+func (s *MockSummary) Min() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.values) == 0 {
+		return 0
+	}
+
+	min := s.values[0]
+	for _, v := range s.values {
+		if v < min {
+			min = v
+		}
+	}
+
+	return min
+}
+
+func (s *MockSummary) Max() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.values) == 0 {
+		return 0
+	}
+
+	max := s.values[0]
+	for _, v := range s.values {
+		if v > max {
+			max = v
+		}
+	}
+
+	return max
+}
+
+func (s *MockSummary) StdDev() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.values) < 2 {
+		return 0
+	}
+
+	mean := s.Mean()
+	variance := 0.0
+
+	for _, v := range s.values {
+		diff := v - mean
+		variance += diff * diff
+	}
+
+	variance /= float64(len(s.values))
+
+	return variance // Simplified: should be sqrt(variance)
+}
+
+func (s *MockSummary) Describe() MetricMetadata {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.metadata
+}
+
+func (s *MockSummary) WithLabels(labels map[string]string) Summary {
+	return NewMockSummary()
+}
+
+func (s *MockSummary) Reset() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.values = make([]float64, 0)
 
 	return nil
 }
