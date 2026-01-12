@@ -261,6 +261,102 @@ func WithTag(key, value string) HealthResultOption {
 	}
 }
 
+func WithTimestamp(timestamp time.Time) HealthResultOption {
+	return func(hr *HealthResult) {
+		hr.Timestamp = timestamp
+	}
+}
+
+func WithTimestampNow() HealthResultOption {
+	return func(hr *HealthResult) {
+		hr.Timestamp = time.Now()
+	}
+}
+
+func WithStatus(status HealthStatus) HealthResultOption {
+	return func(hr *HealthResult) {
+		hr.Status = status
+	}
+}
+
+// WithDetails adds details to the health result.
+func (hr *HealthResult) WithDetails(details map[string]any) *HealthResult {
+	maps.Copy(hr.Details, details)
+
+	return hr
+}
+
+// WithDetail adds a single detail to the health result.
+func (hr *HealthResult) WithDetail(key string, value any) *HealthResult {
+	hr.Details[key] = value
+
+	return hr
+}
+
+// WithError adds an error to the health result.
+func (hr *HealthResult) WithError(err error) *HealthResult {
+	if err != nil {
+		hr.Error = err.Error()
+		if hr.Status == HealthStatusHealthy {
+			hr.Status = HealthStatusUnhealthy
+		}
+	}
+
+	return hr
+}
+
+// WithDuration sets the duration of the health check.
+func (hr *HealthResult) WithDuration(duration time.Duration) *HealthResult {
+	hr.Duration = duration
+
+	return hr
+}
+
+// WithCritical marks the health check as critical.
+func (hr *HealthResult) WithCritical(critical bool) *HealthResult {
+	hr.Critical = critical
+
+	return hr
+}
+
+func (hr *HealthResult) WithStatus(status HealthStatus) *HealthResult {
+	hr.Status = status
+
+	return hr
+}
+
+func (hr *HealthResult) WithMessage(message string) *HealthResult {
+	hr.Message = message
+
+	return hr
+}
+
+// WithTags adds tags to the health result.
+func (hr *HealthResult) WithTags(tags map[string]string) *HealthResult {
+	maps.Copy(hr.Tags, tags)
+
+	return hr
+}
+
+// WithTag adds a single tag to the health result.
+func (hr *HealthResult) WithTag(key, value string) *HealthResult {
+	hr.Tags[key] = value
+
+	return hr
+}
+
+func (hr *HealthResult) WithTimestamp(timestamp time.Time) *HealthResult {
+	hr.Timestamp = timestamp
+
+	return hr
+}
+
+func (hr *HealthResult) WithTimestampNow() *HealthResult {
+	hr.Timestamp = time.Now()
+
+	return hr
+}
+
 // With applies multiple options to the health result.
 func (hr *HealthResult) With(opts ...HealthResultOption) *HealthResult {
 	for _, opt := range opts {

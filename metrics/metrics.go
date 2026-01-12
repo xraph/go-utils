@@ -27,16 +27,16 @@ const (
 )
 
 // MetricsStorageConfig contains storage configuration.
-type MetricsStorageConfig struct {
-	Type   string         `json:"type"   yaml:"type"`
-	Config map[string]any `json:"config" yaml:"config"`
+type MetricsStorageConfig[T any] struct {
+	Type   string `json:"type"   yaml:"type"`
+	Config T      `json:"config" yaml:"config"`
 }
 
 // MetricsExporterConfig contains configuration for exporters.
-type MetricsExporterConfig struct {
-	Enabled  bool           `json:"enabled"  yaml:"enabled"`
-	Interval time.Duration  `json:"interval" yaml:"interval"`
-	Config   map[string]any `json:"config"   yaml:"config"`
+type MetricsExporterConfig[T any] struct {
+	Enabled  bool          `json:"enabled"  yaml:"enabled"`
+	Interval time.Duration `json:"interval" yaml:"interval"`
+	Config   T             `json:"config"   yaml:"config"`
 }
 
 // MetricsFeatures configures which metric collection features are enabled.
@@ -62,12 +62,12 @@ type MetricsLimits struct {
 
 // MetricsConfig configures metrics collection.
 type MetricsConfig struct {
-	Enabled    bool                             `json:"enabled"    yaml:"enabled"`
-	Features   MetricsFeatures                  `json:"features"   yaml:"features"`
-	Collection MetricsCollection                `json:"collection" yaml:"collection"`
-	Limits     MetricsLimits                    `json:"limits"     yaml:"limits"`
-	Storage    *MetricsStorageConfig            `json:"storage"    yaml:"storage"`
-	Exporters  map[string]MetricsExporterConfig `json:"exporters"  yaml:"exporters"`
+	Enabled    bool                                             `json:"enabled"    yaml:"enabled"`
+	Features   MetricsFeatures                                  `json:"features"   yaml:"features"`
+	Collection MetricsCollection                                `json:"collection" yaml:"collection"`
+	Limits     MetricsLimits                                    `json:"limits"     yaml:"limits"`
+	Storage    *MetricsStorageConfig[map[string]any]            `json:"storage"    yaml:"storage"`
+	Exporters  map[string]MetricsExporterConfig[map[string]any] `json:"exporters"  yaml:"exporters"`
 }
 
 // MetricOption is a functional option for configuring metrics.
