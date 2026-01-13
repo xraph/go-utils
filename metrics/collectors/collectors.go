@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xraph/go-utils/log"
 	"github.com/xraph/go-utils/metrics"
 )
 
@@ -91,6 +92,8 @@ type CustomCollectorBuilder struct {
 	timers        map[string]metrics.Timer
 	counterValues map[string]float64 // Track previous counter values for delta calculation
 
+	logger log.Logger
+
 	mu      sync.RWMutex
 	started atomic.Bool
 }
@@ -98,6 +101,16 @@ type CustomCollectorBuilder struct {
 // NewCustomCollectorBuilder creates a new collector builder for the given datasource.
 func NewCustomCollectorBuilder(source CustomMetricSource, opts ...metrics.MetricOption) *CustomCollectorBuilder {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	options := &metrics.MetricOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	logger := options.Logger
+	if logger == nil {
+		logger = log.GetGlobalLogger()
+	}
 
 	return &CustomCollectorBuilder{
 		source:        source,
@@ -112,6 +125,7 @@ func NewCustomCollectorBuilder(source CustomMetricSource, opts ...metrics.Metric
 		summaries:     make(map[string]metrics.Summary),
 		timers:        make(map[string]metrics.Timer),
 		counterValues: make(map[string]float64),
+		logger:        logger,
 	}
 }
 
@@ -201,7 +215,8 @@ func (b *CustomCollectorBuilder) collect() {
 	snapshot, err := b.source.Collect(b.ctx)
 	if err != nil {
 		// Log error but don't stop collecting
-		// TODO: Add proper logging when logger is available
+		b.logger.Error("failed to collect metrics", log.Error(err))
+
 		return
 	}
 

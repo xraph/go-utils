@@ -974,6 +974,10 @@ func (mc *metricsCollector) Gauge(name string, opts ...MetricOption) Gauge {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
+	if mc.logger != nil {
+		mc.logger.Debug("creating gauge", log.String("name", name), log.Any("opts", opts))
+	}
+
 	if gauge, exists := mc.gauges[name]; exists {
 		return gauge
 	}
@@ -987,6 +991,10 @@ func (mc *metricsCollector) Gauge(name string, opts ...MetricOption) Gauge {
 func (mc *metricsCollector) Histogram(name string, opts ...MetricOption) Histogram {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
+
+	if mc.logger != nil {
+		mc.logger.Debug("creating histogram", log.String("name", name), log.Any("opts", opts))
+	}
 
 	if histogram, exists := mc.histograms[name]; exists {
 		return histogram
@@ -1002,6 +1010,10 @@ func (mc *metricsCollector) Summary(name string, opts ...MetricOption) Summary {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
+	if mc.logger != nil {
+		mc.logger.Debug("creating summary", log.String("name", name), log.Any("opts", opts))
+	}
+
 	if summary, exists := mc.summaries[name]; exists {
 		return summary
 	}
@@ -1015,6 +1027,10 @@ func (mc *metricsCollector) Summary(name string, opts ...MetricOption) Summary {
 func (mc *metricsCollector) Timer(name string, opts ...MetricOption) Timer {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
+
+	if mc.logger != nil {
+		mc.logger.Debug("creating timer", log.String("name", name), log.Any("opts", opts))
+	}
 
 	if timer, exists := mc.timers[name]; exists {
 		return timer
@@ -1044,6 +1060,10 @@ func (mc *metricsCollector) RegisterCollector(collector CustomCollector) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
+	if mc.logger != nil {
+		mc.logger.Debug("registering collector", log.String("name", collector.Name()))
+	}
+
 	name := collector.Name()
 	if _, exists := mc.customCollectors[name]; exists {
 		return ErrCollectorAlreadyRegistered
@@ -1057,6 +1077,10 @@ func (mc *metricsCollector) RegisterCollector(collector CustomCollector) error {
 func (mc *metricsCollector) UnregisterCollector(name string) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
+
+	if mc.logger != nil {
+		mc.logger.Debug("unregistering collector", log.String("name", name))
+	}
 
 	if _, exists := mc.customCollectors[name]; !exists {
 		return ErrCollectorNotFound
@@ -1182,6 +1206,10 @@ func (mc *metricsCollector) Reset() error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
+	if mc.logger != nil {
+		mc.logger.Debug("resetting metrics collector")
+	}
+
 	for _, counter := range mc.counters {
 		if err := counter.Reset(); err != nil {
 			return err
@@ -1218,6 +1246,10 @@ func (mc *metricsCollector) Reset() error {
 func (mc *metricsCollector) ResetMetric(name string) error {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
+
+	if mc.logger != nil {
+		mc.logger.Debug("resetting metric", log.String("name", name))
+	}
 
 	if counter, exists := mc.counters[name]; exists {
 		return counter.Reset()

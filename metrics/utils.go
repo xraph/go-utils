@@ -172,10 +172,10 @@ func ValidateLabelKey(key string) error {
 
 	// Check for valid characters
 	for i, char := range key {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char == '_') {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '_' {
 			return &LabelValidationError{
 				Label:  key,
 				Reason: fmt.Sprintf("invalid character at position %d: must be alphanumeric or underscore", i),
@@ -393,10 +393,10 @@ func ValidateMetricName(name string) bool {
 
 	// Basic validation - alphanumeric, underscore, dot, hyphen
 	for _, char := range name {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char == '_' || char == '.' || char == '-') {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '_' && char != '.' && char != '-' {
 			return false
 		}
 	}
