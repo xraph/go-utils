@@ -620,14 +620,14 @@ func (h *MockHistogram) Min() float64 {
 		return 0
 	}
 
-	min := h.values[0]
+	minValue := h.values[0]
 	for _, v := range h.values {
-		if v < min {
-			min = v
+		if v < minValue {
+			minValue = v
 		}
 	}
 
-	return min
+	return minValue
 }
 
 func (h *MockHistogram) Max() float64 {
@@ -638,14 +638,14 @@ func (h *MockHistogram) Max() float64 {
 		return 0
 	}
 
-	max := h.values[0]
+	maxValue := h.values[0]
 	for _, v := range h.values {
-		if v > max {
-			max = v
+		if v > maxValue {
+			maxValue = v
 		}
 	}
 
-	return max
+	return maxValue
 }
 
 func (h *MockHistogram) Quantile(q float64) float64 {
@@ -787,6 +787,7 @@ func (t *MockTimer) StdDev() time.Duration {
 	}
 
 	mean := t.Mean()
+
 	var variance float64
 
 	for _, d := range t.durations {
@@ -971,14 +972,14 @@ func (s *MockSummary) Min() float64 {
 		return 0
 	}
 
-	min := s.values[0]
+	minValue := s.values[0]
 	for _, v := range s.values {
-		if v < min {
-			min = v
+		if v < minValue {
+			minValue = v
 		}
 	}
 
-	return min
+	return minValue
 }
 
 func (s *MockSummary) Max() float64 {
@@ -989,14 +990,14 @@ func (s *MockSummary) Max() float64 {
 		return 0
 	}
 
-	max := s.values[0]
+	maxVal := s.values[0]
 	for _, v := range s.values {
-		if v > max {
-			max = v
+		if v > maxVal {
+			maxVal = v
 		}
 	}
 
-	return max
+	return maxVal
 }
 
 func (s *MockSummary) StdDev() float64 {

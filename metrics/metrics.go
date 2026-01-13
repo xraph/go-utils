@@ -730,9 +730,9 @@ type ExporterStats struct {
 	MaxBytesExported      int64   `json:"max_bytes_exported"`       // Maximum export size
 
 	// Error information
-	LastError         string    `json:"last_error,omitempty"`      // Last error message
-	LastErrorTime     time.Time `json:"last_error_time,omitempty"` // Time of last error
-	ConsecutiveErrors int64     `json:"consecutive_errors"`        // Consecutive error count
+	LastError         string    `json:"last_error,omitempty"`     // Last error message
+	LastErrorTime     time.Time `json:"last_error_time,omitzero"` // Time of last error
+	ConsecutiveErrors int64     `json:"consecutive_errors"`       // Consecutive error count
 
 	// Health indicators
 	SuccessRate float64 `json:"success_rate"` // Success rate (0.0-1.0)
