@@ -160,8 +160,8 @@ type counterImpl struct {
 	exemplars *exemplarStore
 }
 
-// newCounter creates a new counter.
-func newCounter(name string, opts ...MetricOption) *counterImpl {
+// NewCounter creates a new counter.
+func NewCounter(name string, opts ...MetricOption) *counterImpl {
 	return &counterImpl{
 		metricCore: newMetricCore(name, MetricTypeCounter, opts...),
 		exemplars:  newExemplarStore(),
@@ -214,13 +214,13 @@ func (c *counterImpl) Describe() MetricMetadata {
 
 func (c *counterImpl) WithLabels(labels map[string]string) Counter {
 	// Create a new counter with merged labels
-	newCounter := newCounter(c.name, WithLabels(labels))
-	newCounter.description = c.description
-	newCounter.unit = c.unit
-	newCounter.namespace = c.namespace
-	newCounter.subsystem = c.subsystem
+	NewCounter := NewCounter(c.name, WithLabels(labels))
+	NewCounter.description = c.description
+	NewCounter.unit = c.unit
+	NewCounter.namespace = c.namespace
+	NewCounter.subsystem = c.subsystem
 
-	return newCounter
+	return NewCounter
 }
 
 func (c *counterImpl) Reset() error {
@@ -241,8 +241,8 @@ type gaugeImpl struct {
 	value atomic.Uint64 // stores float64 bits
 }
 
-// newGauge creates a new gauge.
-func newGauge(name string, opts ...MetricOption) *gaugeImpl {
+// NewGauge creates a new gauge.
+func NewGauge(name string, opts ...MetricOption) *gaugeImpl {
 	return &gaugeImpl{
 		metricCore: newMetricCore(name, MetricTypeGauge, opts...),
 	}
@@ -298,13 +298,13 @@ func (g *gaugeImpl) Describe() MetricMetadata {
 }
 
 func (g *gaugeImpl) WithLabels(labels map[string]string) Gauge {
-	newGauge := newGauge(g.name, WithLabels(labels))
-	newGauge.description = g.description
-	newGauge.unit = g.unit
-	newGauge.namespace = g.namespace
-	newGauge.subsystem = g.subsystem
+	NewGauge := NewGauge(g.name, WithLabels(labels))
+	NewGauge.description = g.description
+	NewGauge.unit = g.unit
+	NewGauge.namespace = g.namespace
+	NewGauge.subsystem = g.subsystem
 
-	return newGauge
+	return NewGauge
 }
 
 func (g *gaugeImpl) Reset() error {
@@ -332,8 +332,8 @@ type histogramImpl struct {
 	exemplars *exemplarStore
 }
 
-// newHistogram creates a new histogram.
-func newHistogram(name string, opts ...MetricOption) *histogramImpl {
+// NewHistogram creates a new histogram.
+func NewHistogram(name string, opts ...MetricOption) *histogramImpl {
 	options := &MetricOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -540,7 +540,7 @@ func (h *histogramImpl) Describe() MetricMetadata {
 }
 
 func (h *histogramImpl) WithLabels(labels map[string]string) Histogram {
-	newHist := newHistogram(h.name, WithLabels(labels), WithBuckets(h.buckets...))
+	newHist := NewHistogram(h.name, WithLabels(labels), WithBuckets(h.buckets...))
 	newHist.description = h.description
 	newHist.unit = h.unit
 	newHist.namespace = h.namespace
@@ -583,8 +583,8 @@ type summaryImpl struct {
 	bufCap     uint32
 }
 
-// newSummary creates a new summary.
-func newSummary(name string, opts ...MetricOption) *summaryImpl {
+// NewSummary creates a new summary.
+func NewSummary(name string, opts ...MetricOption) *summaryImpl {
 	options := &MetricOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -738,13 +738,13 @@ func (s *summaryImpl) Describe() MetricMetadata {
 }
 
 func (s *summaryImpl) WithLabels(labels map[string]string) Summary {
-	newSummary := newSummary(s.name, WithLabels(labels))
-	newSummary.description = s.description
-	newSummary.unit = s.unit
-	newSummary.namespace = s.namespace
-	newSummary.subsystem = s.subsystem
+	NewSummary := NewSummary(s.name, WithLabels(labels))
+	NewSummary.description = s.description
+	NewSummary.unit = s.unit
+	NewSummary.namespace = s.namespace
+	NewSummary.subsystem = s.subsystem
 
-	return newSummary
+	return NewSummary
 }
 
 func (s *summaryImpl) Reset() error {
@@ -772,8 +772,8 @@ type timerImpl struct {
 	exemplars *exemplarStore
 }
 
-// newTimer creates a new timer.
-func newTimer(name string, opts ...MetricOption) *timerImpl {
+// NewTimer creates a new timer.
+func NewTimer(name string, opts ...MetricOption) *timerImpl {
 	options := &MetricOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -786,7 +786,7 @@ func newTimer(name string, opts ...MetricOption) *timerImpl {
 
 	t := &timerImpl{
 		metricCore: newMetricCore(name, MetricTypeTimer, opts...),
-		histogram:  newHistogram(name+"_duration", opts...),
+		histogram:  NewHistogram(name+"_duration", opts...),
 		exemplars:  newExemplarStore(),
 	}
 
@@ -868,13 +868,13 @@ func (t *timerImpl) Describe() MetricMetadata {
 }
 
 func (t *timerImpl) WithLabels(labels map[string]string) Timer {
-	newTimer := newTimer(t.name, WithLabels(labels))
-	newTimer.description = t.description
-	newTimer.unit = t.unit
-	newTimer.namespace = t.namespace
-	newTimer.subsystem = t.subsystem
+	NewTimer := NewTimer(t.name, WithLabels(labels))
+	NewTimer.description = t.description
+	NewTimer.unit = t.unit
+	NewTimer.namespace = t.namespace
+	NewTimer.subsystem = t.subsystem
 
-	return newTimer
+	return NewTimer
 }
 
 func (t *timerImpl) Reset() error {
@@ -964,7 +964,7 @@ func (mc *metricsCollector) Counter(name string, opts ...MetricOption) Counter {
 		return counter
 	}
 
-	counter := newCounter(name, opts...)
+	counter := NewCounter(name, opts...)
 	mc.counters[name] = counter
 
 	return counter
@@ -982,7 +982,7 @@ func (mc *metricsCollector) Gauge(name string, opts ...MetricOption) Gauge {
 		return gauge
 	}
 
-	gauge := newGauge(name, opts...)
+	gauge := NewGauge(name, opts...)
 	mc.gauges[name] = gauge
 
 	return gauge
@@ -1000,7 +1000,7 @@ func (mc *metricsCollector) Histogram(name string, opts ...MetricOption) Histogr
 		return histogram
 	}
 
-	histogram := newHistogram(name, opts...)
+	histogram := NewHistogram(name, opts...)
 	mc.histograms[name] = histogram
 
 	return histogram
@@ -1018,7 +1018,7 @@ func (mc *metricsCollector) Summary(name string, opts ...MetricOption) Summary {
 		return summary
 	}
 
-	summary := newSummary(name, opts...)
+	summary := NewSummary(name, opts...)
 	mc.summaries[name] = summary
 
 	return summary
@@ -1036,7 +1036,7 @@ func (mc *metricsCollector) Timer(name string, opts ...MetricOption) Timer {
 		return timer
 	}
 
-	timer := newTimer(name, opts...)
+	timer := NewTimer(name, opts...)
 	mc.timers[name] = timer
 
 	return timer

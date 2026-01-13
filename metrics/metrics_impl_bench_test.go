@@ -11,7 +11,7 @@ import (
 // =============================================================================
 
 func BenchmarkCounter_Inc(b *testing.B) {
-	counter := newCounter("bench_counter")
+	counter := NewCounter("bench_counter")
 
 	for b.Loop() {
 		counter.Inc()
@@ -19,7 +19,7 @@ func BenchmarkCounter_Inc(b *testing.B) {
 }
 
 func BenchmarkCounter_Add(b *testing.B) {
-	counter := newCounter("bench_counter")
+	counter := NewCounter("bench_counter")
 
 	for i := 0; b.Loop(); i++ {
 		counter.Add(float64(i))
@@ -27,7 +27,7 @@ func BenchmarkCounter_Add(b *testing.B) {
 }
 
 func BenchmarkCounter_AddWithExemplar(b *testing.B) {
-	counter := newCounter("bench_counter")
+	counter := NewCounter("bench_counter")
 	exemplar := Exemplar{
 		TraceID: "trace123",
 		SpanID:  "span456",
@@ -39,7 +39,7 @@ func BenchmarkCounter_AddWithExemplar(b *testing.B) {
 }
 
 func BenchmarkCounter_Value(b *testing.B) {
-	counter := newCounter("bench_counter")
+	counter := NewCounter("bench_counter")
 	counter.Add(1000)
 
 	for b.Loop() {
@@ -48,7 +48,7 @@ func BenchmarkCounter_Value(b *testing.B) {
 }
 
 func BenchmarkCounter_Concurrent(b *testing.B) {
-	counter := newCounter("concurrent_counter")
+	counter := NewCounter("concurrent_counter")
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -63,7 +63,7 @@ func BenchmarkCounter_Concurrent(b *testing.B) {
 // =============================================================================
 
 func BenchmarkGauge_Set(b *testing.B) {
-	gauge := newGauge("bench_gauge")
+	gauge := NewGauge("bench_gauge")
 
 	for i := 0; b.Loop(); i++ {
 		gauge.Set(float64(i))
@@ -71,7 +71,7 @@ func BenchmarkGauge_Set(b *testing.B) {
 }
 
 func BenchmarkGauge_Inc(b *testing.B) {
-	gauge := newGauge("bench_gauge")
+	gauge := NewGauge("bench_gauge")
 
 	for b.Loop() {
 		gauge.Inc()
@@ -79,7 +79,7 @@ func BenchmarkGauge_Inc(b *testing.B) {
 }
 
 func BenchmarkGauge_Add(b *testing.B) {
-	gauge := newGauge("bench_gauge")
+	gauge := NewGauge("bench_gauge")
 
 	for i := 0; b.Loop(); i++ {
 		gauge.Add(float64(i))
@@ -87,7 +87,7 @@ func BenchmarkGauge_Add(b *testing.B) {
 }
 
 func BenchmarkGauge_Value(b *testing.B) {
-	gauge := newGauge("bench_gauge")
+	gauge := NewGauge("bench_gauge")
 	gauge.Set(100)
 
 	for b.Loop() {
@@ -96,7 +96,7 @@ func BenchmarkGauge_Value(b *testing.B) {
 }
 
 func BenchmarkGauge_Concurrent(b *testing.B) {
-	gauge := newGauge("concurrent_gauge")
+	gauge := NewGauge("concurrent_gauge")
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -111,7 +111,7 @@ func BenchmarkGauge_Concurrent(b *testing.B) {
 // =============================================================================
 
 func BenchmarkHistogram_Observe(b *testing.B) {
-	histogram := newHistogram("bench_histogram",
+	histogram := NewHistogram("bench_histogram",
 		WithBuckets(1, 5, 10, 50, 100, 500, 1000),
 	)
 
@@ -121,7 +121,7 @@ func BenchmarkHistogram_Observe(b *testing.B) {
 }
 
 func BenchmarkHistogram_ObserveWithExemplar(b *testing.B) {
-	histogram := newHistogram("bench_histogram")
+	histogram := NewHistogram("bench_histogram")
 	exemplar := Exemplar{
 		TraceID: "trace789",
 		SpanID:  "span012",
@@ -133,7 +133,7 @@ func BenchmarkHistogram_ObserveWithExemplar(b *testing.B) {
 }
 
 func BenchmarkHistogram_Quantile(b *testing.B) {
-	histogram := newHistogram("bench_histogram")
+	histogram := NewHistogram("bench_histogram")
 
 	for i := range 1000 {
 		histogram.Observe(float64(i))
@@ -145,7 +145,7 @@ func BenchmarkHistogram_Quantile(b *testing.B) {
 }
 
 func BenchmarkHistogram_Mean(b *testing.B) {
-	histogram := newHistogram("bench_histogram")
+	histogram := NewHistogram("bench_histogram")
 
 	for i := range 1000 {
 		histogram.Observe(float64(i))
@@ -157,7 +157,7 @@ func BenchmarkHistogram_Mean(b *testing.B) {
 }
 
 func BenchmarkHistogram_Concurrent(b *testing.B) {
-	histogram := newHistogram("concurrent_histogram")
+	histogram := NewHistogram("concurrent_histogram")
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -172,7 +172,7 @@ func BenchmarkHistogram_Concurrent(b *testing.B) {
 // =============================================================================
 
 func BenchmarkSummary_Observe(b *testing.B) {
-	summary := newSummary("bench_summary")
+	summary := NewSummary("bench_summary")
 
 	for i := 0; b.Loop(); i++ {
 		summary.Observe(float64(i % 1000))
@@ -180,7 +180,7 @@ func BenchmarkSummary_Observe(b *testing.B) {
 }
 
 func BenchmarkSummary_Quantile(b *testing.B) {
-	summary := newSummary("bench_summary")
+	summary := NewSummary("bench_summary")
 
 	for i := range 1000 {
 		summary.Observe(float64(i))
@@ -192,7 +192,7 @@ func BenchmarkSummary_Quantile(b *testing.B) {
 }
 
 func BenchmarkSummary_Mean(b *testing.B) {
-	summary := newSummary("bench_summary")
+	summary := NewSummary("bench_summary")
 
 	for i := range 1000 {
 		summary.Observe(float64(i))
@@ -204,7 +204,7 @@ func BenchmarkSummary_Mean(b *testing.B) {
 }
 
 func BenchmarkSummary_StdDev(b *testing.B) {
-	summary := newSummary("bench_summary")
+	summary := NewSummary("bench_summary")
 
 	for i := range 1000 {
 		summary.Observe(float64(i))
@@ -216,7 +216,7 @@ func BenchmarkSummary_StdDev(b *testing.B) {
 }
 
 func BenchmarkSummary_Concurrent(b *testing.B) {
-	summary := newSummary("concurrent_summary")
+	summary := NewSummary("concurrent_summary")
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -231,7 +231,7 @@ func BenchmarkSummary_Concurrent(b *testing.B) {
 // =============================================================================
 
 func BenchmarkTimer_Record(b *testing.B) {
-	timer := newTimer("bench_timer")
+	timer := NewTimer("bench_timer")
 
 	for b.Loop() {
 		timer.Record(100 * time.Millisecond)
@@ -239,7 +239,7 @@ func BenchmarkTimer_Record(b *testing.B) {
 }
 
 func BenchmarkTimer_RecordWithExemplar(b *testing.B) {
-	timer := newTimer("bench_timer")
+	timer := NewTimer("bench_timer")
 	exemplar := Exemplar{
 		TraceID: "timer_trace",
 		SpanID:  "timer_span",
@@ -251,7 +251,7 @@ func BenchmarkTimer_RecordWithExemplar(b *testing.B) {
 }
 
 func BenchmarkTimer_Time(b *testing.B) {
-	timer := newTimer("bench_timer")
+	timer := NewTimer("bench_timer")
 
 	for b.Loop() {
 		done := timer.Time()
@@ -260,7 +260,7 @@ func BenchmarkTimer_Time(b *testing.B) {
 }
 
 func BenchmarkTimer_Percentile(b *testing.B) {
-	timer := newTimer("bench_timer")
+	timer := NewTimer("bench_timer")
 
 	for i := range 1000 {
 		timer.Record(time.Duration(i) * time.Millisecond)
@@ -272,7 +272,7 @@ func BenchmarkTimer_Percentile(b *testing.B) {
 }
 
 func BenchmarkTimer_Concurrent(b *testing.B) {
-	timer := newTimer("concurrent_timer")
+	timer := NewTimer("concurrent_timer")
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -337,7 +337,7 @@ func BenchmarkMetricsCollector_Stats(b *testing.B) {
 // =============================================================================
 
 func BenchmarkCounter_Allocations(b *testing.B) {
-	counter := newCounter("alloc_counter")
+	counter := NewCounter("alloc_counter")
 
 	b.ReportAllocs()
 
@@ -347,7 +347,7 @@ func BenchmarkCounter_Allocations(b *testing.B) {
 }
 
 func BenchmarkHistogram_Allocations(b *testing.B) {
-	histogram := newHistogram("alloc_histogram")
+	histogram := NewHistogram("alloc_histogram")
 
 	b.ReportAllocs()
 
@@ -357,7 +357,7 @@ func BenchmarkHistogram_Allocations(b *testing.B) {
 }
 
 func BenchmarkTimer_Allocations(b *testing.B) {
-	timer := newTimer("alloc_timer")
+	timer := NewTimer("alloc_timer")
 
 	b.ReportAllocs()
 
@@ -427,7 +427,7 @@ func BenchmarkScenario_MixedOperations(b *testing.B) {
 // =============================================================================
 
 func BenchmarkContention_Counter_LowContention(b *testing.B) {
-	counter := newCounter("low_contention_counter")
+	counter := NewCounter("low_contention_counter")
 	numWorkers := 2
 
 	b.ResetTimer()
@@ -435,7 +435,7 @@ func BenchmarkContention_Counter_LowContention(b *testing.B) {
 }
 
 func BenchmarkContention_Counter_HighContention(b *testing.B) {
-	counter := newCounter("high_contention_counter")
+	counter := NewCounter("high_contention_counter")
 	numWorkers := 16
 
 	b.ResetTimer()

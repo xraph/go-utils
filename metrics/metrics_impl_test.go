@@ -16,7 +16,7 @@ import (
 // =============================================================================
 
 func TestCounter_BasicOperations(t *testing.T) {
-	counter := newCounter("test_counter")
+	counter := NewCounter("test_counter")
 
 	assert.Equal(t, 0.0, counter.Value())
 
@@ -32,7 +32,7 @@ func TestCounter_BasicOperations(t *testing.T) {
 }
 
 func TestCounter_ConcurrentIncrements(t *testing.T) {
-	counter := newCounter("concurrent_counter")
+	counter := NewCounter("concurrent_counter")
 	numGoroutines := 100
 	incrementsPerGoroutine := 1000
 
@@ -56,7 +56,7 @@ func TestCounter_ConcurrentIncrements(t *testing.T) {
 }
 
 func TestCounter_Exemplars(t *testing.T) {
-	counter := newCounter("exemplar_counter")
+	counter := NewCounter("exemplar_counter")
 
 	exemplar := Exemplar{
 		Value:     10.0,
@@ -74,7 +74,7 @@ func TestCounter_Exemplars(t *testing.T) {
 }
 
 func TestCounter_Timestamp(t *testing.T) {
-	counter := newCounter("timestamp_counter")
+	counter := NewCounter("timestamp_counter")
 
 	before := time.Now()
 
@@ -89,7 +89,7 @@ func TestCounter_Timestamp(t *testing.T) {
 }
 
 func TestCounter_Describe(t *testing.T) {
-	counter := newCounter("described_counter",
+	counter := NewCounter("described_counter",
 		WithDescription("Test counter"),
 		WithUnit("requests"),
 		WithNamespace("myapp"),
@@ -104,7 +104,7 @@ func TestCounter_Describe(t *testing.T) {
 }
 
 func TestCounter_Reset(t *testing.T) {
-	counter := newCounter("reset_counter")
+	counter := NewCounter("reset_counter")
 	counter.Add(100)
 	assert.Equal(t, 100.0, counter.Value())
 
@@ -118,7 +118,7 @@ func TestCounter_Reset(t *testing.T) {
 // =============================================================================
 
 func TestGauge_BasicOperations(t *testing.T) {
-	gauge := newGauge("test_gauge")
+	gauge := NewGauge("test_gauge")
 
 	gauge.Set(42.5)
 	assert.Equal(t, 42.5, gauge.Value())
@@ -137,7 +137,7 @@ func TestGauge_BasicOperations(t *testing.T) {
 }
 
 func TestGauge_NegativeValues(t *testing.T) {
-	gauge := newGauge("negative_gauge")
+	gauge := NewGauge("negative_gauge")
 
 	gauge.Set(-10.5)
 	assert.Equal(t, -10.5, gauge.Value())
@@ -147,7 +147,7 @@ func TestGauge_NegativeValues(t *testing.T) {
 }
 
 func TestGauge_SetToCurrentTime(t *testing.T) {
-	gauge := newGauge("time_gauge")
+	gauge := NewGauge("time_gauge")
 
 	before := time.Now().Unix()
 
@@ -161,7 +161,7 @@ func TestGauge_SetToCurrentTime(t *testing.T) {
 }
 
 func TestGauge_ConcurrentModifications(t *testing.T) {
-	gauge := newGauge("concurrent_gauge")
+	gauge := NewGauge("concurrent_gauge")
 	numGoroutines := 50
 
 	var wg sync.WaitGroup
@@ -192,7 +192,7 @@ func TestGauge_ConcurrentModifications(t *testing.T) {
 // =============================================================================
 
 func TestHistogram_BasicObservations(t *testing.T) {
-	histogram := newHistogram("test_histogram",
+	histogram := NewHistogram("test_histogram",
 		WithBuckets(1, 5, 10, 50, 100),
 	)
 
@@ -207,7 +207,7 @@ func TestHistogram_BasicObservations(t *testing.T) {
 }
 
 func TestHistogram_MinMax(t *testing.T) {
-	histogram := newHistogram("minmax_histogram")
+	histogram := NewHistogram("minmax_histogram")
 
 	histogram.Observe(10)
 	histogram.Observe(5)
@@ -219,7 +219,7 @@ func TestHistogram_MinMax(t *testing.T) {
 }
 
 func TestHistogram_Quantiles(t *testing.T) {
-	histogram := newHistogram("quantile_histogram",
+	histogram := NewHistogram("quantile_histogram",
 		WithBuckets(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
 	)
 
@@ -238,7 +238,7 @@ func TestHistogram_Quantiles(t *testing.T) {
 }
 
 func TestHistogram_Exemplars(t *testing.T) {
-	histogram := newHistogram("exemplar_histogram")
+	histogram := NewHistogram("exemplar_histogram")
 
 	exemplar := Exemplar{
 		TraceID: "trace789",
@@ -254,7 +254,7 @@ func TestHistogram_Exemplars(t *testing.T) {
 }
 
 func TestHistogram_ConcurrentObservations(t *testing.T) {
-	histogram := newHistogram("concurrent_histogram")
+	histogram := NewHistogram("concurrent_histogram")
 	numGoroutines := 100
 	observationsPerGoroutine := 100
 
@@ -278,7 +278,7 @@ func TestHistogram_ConcurrentObservations(t *testing.T) {
 }
 
 func TestHistogram_EmptyState(t *testing.T) {
-	histogram := newHistogram("empty_histogram")
+	histogram := NewHistogram("empty_histogram")
 
 	assert.Equal(t, uint64(0), histogram.Count())
 	assert.Equal(t, 0.0, histogram.Sum())
@@ -289,7 +289,7 @@ func TestHistogram_EmptyState(t *testing.T) {
 }
 
 func TestHistogram_Reset(t *testing.T) {
-	histogram := newHistogram("reset_histogram")
+	histogram := NewHistogram("reset_histogram")
 
 	for i := range 100 {
 		histogram.Observe(float64(i))
@@ -308,7 +308,7 @@ func TestHistogram_Reset(t *testing.T) {
 // =============================================================================
 
 func TestSummary_BasicObservations(t *testing.T) {
-	summary := newSummary("test_summary")
+	summary := NewSummary("test_summary")
 
 	summary.Observe(10)
 	summary.Observe(20)
@@ -322,7 +322,7 @@ func TestSummary_BasicObservations(t *testing.T) {
 }
 
 func TestSummary_Quantiles(t *testing.T) {
-	summary := newSummary("quantile_summary")
+	summary := NewSummary("quantile_summary")
 
 	// Add values 1-100
 	for i := 1; i <= 100; i++ {
@@ -341,7 +341,7 @@ func TestSummary_Quantiles(t *testing.T) {
 }
 
 func TestSummary_MinMax(t *testing.T) {
-	summary := newSummary("minmax_summary")
+	summary := NewSummary("minmax_summary")
 
 	summary.Observe(100)
 	summary.Observe(50)
@@ -353,7 +353,7 @@ func TestSummary_MinMax(t *testing.T) {
 }
 
 func TestSummary_StdDev(t *testing.T) {
-	summary := newSummary("stddev_summary")
+	summary := NewSummary("stddev_summary")
 
 	// Add values with known stddev
 	values := []float64{2, 4, 4, 4, 5, 5, 7, 9}
@@ -367,7 +367,7 @@ func TestSummary_StdDev(t *testing.T) {
 }
 
 func TestSummary_ConcurrentObservations(t *testing.T) {
-	summary := newSummary("concurrent_summary")
+	summary := NewSummary("concurrent_summary")
 	numGoroutines := 50
 	observationsPerGoroutine := 100
 
@@ -395,7 +395,7 @@ func TestSummary_ConcurrentObservations(t *testing.T) {
 // =============================================================================
 
 func TestTimer_BasicRecording(t *testing.T) {
-	timer := newTimer("test_timer")
+	timer := NewTimer("test_timer")
 
 	timer.Record(100 * time.Millisecond)
 	timer.Record(200 * time.Millisecond)
@@ -411,7 +411,7 @@ func TestTimer_BasicRecording(t *testing.T) {
 }
 
 func TestTimer_TimeFunction(t *testing.T) {
-	timer := newTimer("defer_timer")
+	timer := NewTimer("defer_timer")
 
 	func() {
 		defer timer.Time()()
@@ -427,7 +427,7 @@ func TestTimer_TimeFunction(t *testing.T) {
 }
 
 func TestTimer_MinMax(t *testing.T) {
-	timer := newTimer("minmax_timer")
+	timer := NewTimer("minmax_timer")
 
 	timer.Record(50 * time.Millisecond)
 	timer.Record(100 * time.Millisecond)
@@ -441,7 +441,7 @@ func TestTimer_MinMax(t *testing.T) {
 }
 
 func TestTimer_Percentiles(t *testing.T) {
-	timer := newTimer("percentile_timer",
+	timer := NewTimer("percentile_timer",
 		WithBuckets(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
 	)
 
@@ -458,7 +458,7 @@ func TestTimer_Percentiles(t *testing.T) {
 }
 
 func TestTimer_Exemplars(t *testing.T) {
-	timer := newTimer("exemplar_timer")
+	timer := NewTimer("exemplar_timer")
 
 	exemplar := Exemplar{
 		TraceID: "timer_trace",
@@ -713,7 +713,7 @@ func TestIntegration_HighConcurrency(t *testing.T) {
 // =============================================================================
 
 func TestEdgeCase_LargeValues(t *testing.T) {
-	counter := newCounter("large_counter")
+	counter := NewCounter("large_counter")
 
 	largeValue := math.MaxFloat64 / 2
 	counter.Add(largeValue)
@@ -723,7 +723,7 @@ func TestEdgeCase_LargeValues(t *testing.T) {
 }
 
 func TestEdgeCase_VerySmallValues(t *testing.T) {
-	gauge := newGauge("small_gauge")
+	gauge := NewGauge("small_gauge")
 
 	smallValue := math.SmallestNonzeroFloat64
 	gauge.Set(smallValue)
@@ -732,7 +732,7 @@ func TestEdgeCase_VerySmallValues(t *testing.T) {
 }
 
 func TestEdgeCase_NegativeCounterAdd(t *testing.T) {
-	counter := newCounter("negative_test_counter")
+	counter := NewCounter("negative_test_counter")
 
 	counter.Add(10)
 	counter.Add(-5) // Should be ignored
@@ -742,7 +742,7 @@ func TestEdgeCase_NegativeCounterAdd(t *testing.T) {
 
 func TestEdgeCase_EmptyBuckets(t *testing.T) {
 	// Should use default buckets
-	histogram := newHistogram("default_bucket_histogram")
+	histogram := NewHistogram("default_bucket_histogram")
 
 	histogram.Observe(50)
 	assert.Equal(t, uint64(1), histogram.Count())
@@ -753,7 +753,7 @@ func TestEdgeCase_EmptyBuckets(t *testing.T) {
 // =============================================================================
 
 func TestLabels_WithLabels(t *testing.T) {
-	counter := newCounter("labeled_counter",
+	counter := NewCounter("labeled_counter",
 		WithLabels(map[string]string{
 			"method": "GET",
 			"path":   "/api/users",
@@ -777,7 +777,7 @@ func TestLabels_WithLabels(t *testing.T) {
 }
 
 func TestLabels_ConstLabels(t *testing.T) {
-	counter := newCounter("const_labeled_counter",
+	counter := NewCounter("const_labeled_counter",
 		WithConstLabels(map[string]string{
 			"version": "1.0.0",
 			"env":     "production",
