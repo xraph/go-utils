@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/xraph/go-utils/di"
+	"github.com/xraph/go-utils/log"
 )
 
 // ExportFormat represents the format for metrics export.
@@ -151,6 +152,23 @@ type MetricOptions struct {
 	MaxAge      time.Duration // Sliding window duration for time-based metrics
 	AgeBuckets  uint32        // Number of time-based rotation buckets
 	BufCap      uint32        // Buffer capacity for observations
+
+	Logger log.Logger
+	Config *MetricsConfig
+}
+
+// WithConfig sets the metrics configuration.
+func WithConfig(config *MetricsConfig) MetricOption {
+	return func(opts *MetricOptions) {
+		opts.Config = config
+	}
+}
+
+// WithLogger sets the logger.
+func WithLogger(logger log.Logger) MetricOption {
+	return func(opts *MetricOptions) {
+		opts.Logger = logger
+	}
 }
 
 // WithLabel adds a single label to the metric.

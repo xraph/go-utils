@@ -102,7 +102,7 @@ func NewCustomCollectorBuilder(source CustomMetricSource, opts ...metrics.Metric
 	return &CustomCollectorBuilder{
 		source:        source,
 		interval:      10 * time.Second, // default poll interval
-		metrics:       metrics.NewMetricsCollector(source.Name()),
+		metrics:       metrics.NewMetricsCollector(source.Name(), opts...),
 		options:       opts,
 		ctx:           ctx,
 		cancel:        cancel,

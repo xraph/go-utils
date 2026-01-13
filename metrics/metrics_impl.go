@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/beorn7/perks/quantile"
+	"github.com/xraph/go-utils/log"
 )
 
 // =============================================================================
@@ -902,10 +903,17 @@ type metricsCollector struct {
 	customCollectors map[string]CustomCollector
 	startTime        time.Time
 	started          atomic.Bool
+	logger           log.Logger
+	config           *MetricsConfig
 }
 
 // NewMetricsCollector creates a new metrics collector.
-func NewMetricsCollector(name string) Metrics {
+func NewMetricsCollector(name string, opts ...MetricOption) Metrics {
+	options := &MetricOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return &metricsCollector{
 		name:             name,
 		counters:         make(map[string]*counterImpl),
@@ -915,6 +923,8 @@ func NewMetricsCollector(name string) Metrics {
 		timers:           make(map[string]*timerImpl),
 		customCollectors: make(map[string]CustomCollector),
 		startTime:        time.Now(),
+		logger:           options.Logger,
+		config:           options.Config,
 	}
 }
 
