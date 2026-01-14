@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 	"testing"
@@ -787,4 +788,255 @@ func TestLabels_ConstLabels(t *testing.T) {
 	metadata := counter.Describe()
 	assert.Equal(t, "1.0.0", metadata.ConstLabels["version"])
 	assert.Equal(t, "production", metadata.ConstLabels["env"])
+}
+
+// =============================================================================
+// DEFAULT TAGS TESTS
+// =============================================================================
+
+func TestMetricsCollector_DefaultTags_Counter(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			Namespace: "myapp",
+			DefaultTags: map[string]string{
+				"env":     "production",
+				"service": "api",
+				"version": "1.0.0",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+	counter := collector.Counter("requests")
+
+	metadata := counter.Describe()
+	assert.Equal(t, "myapp", metadata.Namespace)
+	assert.Equal(t, "production", metadata.ConstLabels["env"])
+	assert.Equal(t, "api", metadata.ConstLabels["service"])
+	assert.Equal(t, "1.0.0", metadata.ConstLabels["version"])
+	assert.Equal(t, "myapp_requests", metadata.Name)
+}
+
+func TestMetricsCollector_DefaultTags_Gauge(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			DefaultTags: map[string]string{
+				"region": "us-east-1",
+				"env":    "staging",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+	gauge := collector.Gauge("memory_usage")
+
+	metadata := gauge.Describe()
+	assert.Equal(t, "us-east-1", metadata.ConstLabels["region"])
+	assert.Equal(t, "staging", metadata.ConstLabels["env"])
+}
+
+func TestMetricsCollector_DefaultTags_Histogram(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			DefaultTags: map[string]string{
+				"datacenter": "dc1",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+	histogram := collector.Histogram("request_duration")
+
+	metadata := histogram.Describe()
+	assert.Equal(t, "dc1", metadata.ConstLabels["datacenter"])
+}
+
+func TestMetricsCollector_DefaultTags_Summary(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			DefaultTags: map[string]string{
+				"team": "platform",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+	summary := collector.Summary("response_size")
+
+	metadata := summary.Describe()
+	assert.Equal(t, "platform", metadata.ConstLabels["team"])
+}
+
+func TestMetricsCollector_DefaultTags_Timer(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			DefaultTags: map[string]string{
+				"app": "backend",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+	timer := collector.Timer("processing_time")
+
+	metadata := timer.Describe()
+	assert.Equal(t, "backend", metadata.ConstLabels["app"])
+}
+
+func TestMetricsCollector_DefaultTags_Precedence(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			Namespace: "default_ns",
+			DefaultTags: map[string]string{
+				"env":     "production",
+				"service": "api",
+				"version": "1.0.0",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+
+	// Metric-specific options should override defaults
+	counter := collector.Counter("requests",
+		WithNamespace("custom_ns"),
+		WithConstLabels(map[string]string{
+			"env":      "staging", // Override default
+			"instance": "i-123",   // Add new label
+		}),
+	)
+
+	metadata := counter.Describe()
+	assert.Equal(t, "custom_ns", metadata.Namespace, "Metric-specific namespace should override default")
+	assert.Equal(t, "staging", metadata.ConstLabels["env"], "Metric-specific env should override default")
+	assert.Equal(t, "i-123", metadata.ConstLabels["instance"], "Metric-specific labels should be present")
+
+	// Default tags that weren't overridden should still be present
+	// Note: WithConstLabels replaces all const labels, so only the explicitly set ones remain
+	assert.NotContains(t, metadata.ConstLabels, "service", "Non-overridden defaults are replaced when using WithConstLabels")
+}
+
+func TestMetricsCollector_DefaultTags_NoConfig(t *testing.T) {
+	// Should work fine with nil config
+	collector := NewMetricsCollector("test_collector")
+	counter := collector.Counter("requests")
+
+	metadata := counter.Describe()
+	assert.Empty(t, metadata.ConstLabels)
+	assert.Empty(t, metadata.Namespace)
+}
+
+func TestMetricsCollector_DefaultTags_EmptyDefaultTags(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			DefaultTags: map[string]string{},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+	counter := collector.Counter("requests")
+
+	metadata := counter.Describe()
+	assert.Empty(t, metadata.ConstLabels)
+}
+
+func TestMetricsCollector_DefaultTags_AllMetricTypes(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			Namespace: "testapp",
+			DefaultTags: map[string]string{
+				"env":     "test",
+				"service": "metrics",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+
+	// Create all metric types
+	counter := collector.Counter("counter_metric")
+	gauge := collector.Gauge("gauge_metric")
+	histogram := collector.Histogram("histogram_metric")
+	summary := collector.Summary("summary_metric")
+	timer := collector.Timer("timer_metric")
+
+	// Verify all have default tags
+	metrics := []struct {
+		name     string
+		metadata MetricMetadata
+	}{
+		{"counter", counter.Describe()},
+		{"gauge", gauge.Describe()},
+		{"histogram", histogram.Describe()},
+		{"summary", summary.Describe()},
+		{"timer", timer.Describe()},
+	}
+
+	for _, m := range metrics {
+		assert.Equal(t, "testapp", m.metadata.Namespace, "Namespace should be set for %s", m.name)
+		assert.Equal(t, "test", m.metadata.ConstLabels["env"], "env tag should be set for %s", m.name)
+		assert.Equal(t, "metrics", m.metadata.ConstLabels["service"], "service tag should be set for %s", m.name)
+	}
+}
+
+func TestMetricsCollector_DefaultTags_Concurrent(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			DefaultTags: map[string]string{
+				"env": "test",
+			},
+		},
+	}
+
+	collector := NewMetricsCollector("test_collector", WithConfig(config))
+
+	// Create metrics concurrently
+	var wg sync.WaitGroup
+
+	numGoroutines := 10
+
+	wg.Add(numGoroutines)
+
+	for i := range numGoroutines {
+		go func(id int) {
+			defer wg.Done()
+
+			counter := collector.Counter(fmt.Sprintf("concurrent_counter_%d", id))
+			metadata := counter.Describe()
+			assert.Equal(t, "test", metadata.ConstLabels["env"])
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestMetricsCollector_MergeDefaultOptions(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			Namespace: "myapp",
+			DefaultTags: map[string]string{
+				"env": "prod",
+			},
+		},
+	}
+
+	mc := NewMetricsCollector("test", WithConfig(config)).(*metricsCollector)
+
+	// Test with no options
+	merged := mc.mergeDefaultOptions(nil)
+	assert.Len(t, merged, 2, "Should have namespace and default tags options")
+
+	// Test with existing options
+	opts := []MetricOption{
+		WithDescription("test metric"),
+		WithUnit("requests"),
+	}
+
+	merged = mc.mergeDefaultOptions(opts)
+	assert.Len(t, merged, 4, "Should have namespace, default tags, and 2 custom options")
+
+	// Test with nil config
+	mcNilConfig := NewMetricsCollector("test").(*metricsCollector)
+	merged = mcNilConfig.mergeDefaultOptions(opts)
+	assert.Equal(t, opts, merged, "Should return original opts when config is nil")
 }

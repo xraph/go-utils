@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"maps"
 	"math"
 	"sort"
 	"strings"
@@ -954,6 +955,35 @@ func (mc *metricsCollector) Health(ctx context.Context) error {
 	return nil
 }
 
+// mergeDefaultOptions merges default tags from config with metric-specific options.
+// Metric-specific options take precedence over defaults.
+func (mc *metricsCollector) mergeDefaultOptions(opts []MetricOption) []MetricOption {
+	if mc.config == nil || len(mc.config.Collection.DefaultTags) == 0 {
+		return opts
+	}
+
+	// Create merged options slice with default tags first
+	mergedOpts := make([]MetricOption, 0, len(opts)+2)
+
+	// Add namespace from config if present
+	if mc.config.Collection.Namespace != "" {
+		mergedOpts = append(mergedOpts, WithNamespace(mc.config.Collection.Namespace))
+	}
+
+	// Add default tags from config as const labels (they apply to all metrics)
+	if len(mc.config.Collection.DefaultTags) > 0 {
+		defaultTagsCopy := make(map[string]string, len(mc.config.Collection.DefaultTags))
+		maps.Copy(defaultTagsCopy, mc.config.Collection.DefaultTags)
+
+		mergedOpts = append(mergedOpts, WithConstLabels(defaultTagsCopy))
+	}
+
+	// Append metric-specific options (these will override defaults if they conflict)
+	mergedOpts = append(mergedOpts, opts...)
+
+	return mergedOpts
+}
+
 // MetricFactory interface implementation
 
 func (mc *metricsCollector) Counter(name string, opts ...MetricOption) Counter {
@@ -964,7 +994,9 @@ func (mc *metricsCollector) Counter(name string, opts ...MetricOption) Counter {
 		return counter
 	}
 
-	counter := NewCounter(name, opts...)
+	// Merge default tags from config with metric-specific options
+	mergedOpts := mc.mergeDefaultOptions(opts)
+	counter := NewCounter(name, mergedOpts...)
 	mc.counters[name] = counter
 
 	return counter
@@ -982,7 +1014,9 @@ func (mc *metricsCollector) Gauge(name string, opts ...MetricOption) Gauge {
 		return gauge
 	}
 
-	gauge := NewGauge(name, opts...)
+	// Merge default tags from config with metric-specific options
+	mergedOpts := mc.mergeDefaultOptions(opts)
+	gauge := NewGauge(name, mergedOpts...)
 	mc.gauges[name] = gauge
 
 	return gauge
@@ -1000,7 +1034,9 @@ func (mc *metricsCollector) Histogram(name string, opts ...MetricOption) Histogr
 		return histogram
 	}
 
-	histogram := NewHistogram(name, opts...)
+	// Merge default tags from config with metric-specific options
+	mergedOpts := mc.mergeDefaultOptions(opts)
+	histogram := NewHistogram(name, mergedOpts...)
 	mc.histograms[name] = histogram
 
 	return histogram
@@ -1018,7 +1054,9 @@ func (mc *metricsCollector) Summary(name string, opts ...MetricOption) Summary {
 		return summary
 	}
 
-	summary := NewSummary(name, opts...)
+	// Merge default tags from config with metric-specific options
+	mergedOpts := mc.mergeDefaultOptions(opts)
+	summary := NewSummary(name, mergedOpts...)
 	mc.summaries[name] = summary
 
 	return summary
@@ -1036,7 +1074,9 @@ func (mc *metricsCollector) Timer(name string, opts ...MetricOption) Timer {
 		return timer
 	}
 
-	timer := NewTimer(name, opts...)
+	// Merge default tags from config with metric-specific options
+	mergedOpts := mc.mergeDefaultOptions(opts)
+	timer := NewTimer(name, mergedOpts...)
 	mc.timers[name] = timer
 
 	return timer

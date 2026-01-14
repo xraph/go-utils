@@ -349,3 +349,76 @@ func Example_realWorld() {
 	// Avg duration: 1ms
 	// Active connections: 0
 }
+
+// Example_defaultTags demonstrates how to configure default tags that apply to all metrics.
+func Example_defaultTags() {
+	// Create a metrics configuration with default tags
+	config := &metrics.MetricsConfig{
+		Collection: metrics.MetricsCollection{
+			Namespace: "myapp",
+			DefaultTags: map[string]string{
+				"env":     "production",
+				"service": "api",
+				"version": "1.0.0",
+				"region":  "us-east-1",
+			},
+		},
+	}
+
+	// Create a metrics collector with the config
+	collector := metrics.NewMetricsCollector("api_metrics", metrics.WithConfig(config))
+
+	// All metrics created by this collector will inherit the default tags
+	requestCounter := collector.Counter("http_requests_total")
+	responseTime := collector.Histogram("http_response_time_ms")
+	activeUsers := collector.Gauge("active_users")
+
+	// Use the metrics
+	requestCounter.Inc()
+	responseTime.Observe(45.5)
+	activeUsers.Set(150)
+
+	// Verify that default tags are applied
+	counterMeta := requestCounter.Describe()
+	histogramMeta := responseTime.Describe()
+	gaugeMeta := activeUsers.Describe()
+
+	fmt.Printf("Counter Name: %s\n", counterMeta.Name)
+	fmt.Printf("Counter Namespace: %s\n", counterMeta.Namespace)
+	fmt.Printf("Counter Labels: env=%s, service=%s, version=%s\n",
+		counterMeta.ConstLabels["env"],
+		counterMeta.ConstLabels["service"],
+		counterMeta.ConstLabels["version"])
+
+	fmt.Printf("\nHistogram Name: %s\n", histogramMeta.Name)
+	fmt.Printf("Histogram Labels: region=%s\n", histogramMeta.ConstLabels["region"])
+
+	fmt.Printf("\nGauge Name: %s\n", gaugeMeta.Name)
+	fmt.Printf("All metrics have %d default tags\n", len(gaugeMeta.ConstLabels))
+
+	// You can still override defaults on a per-metric basis
+	customCounter := collector.Counter("custom_counter",
+		metrics.WithConstLabels(map[string]string{
+			"env":      "staging", // Override default
+			"instance": "i-123",   // Add new label
+		}),
+	)
+
+	customMeta := customCounter.Describe()
+	fmt.Printf("\nCustom Counter env: %s\n", customMeta.ConstLabels["env"])
+	fmt.Printf("Custom Counter instance: %s\n", customMeta.ConstLabels["instance"])
+
+	// Output:
+	// Counter Name: myapp_http_requests_total
+	// Counter Namespace: myapp
+	// Counter Labels: env=production, service=api, version=1.0.0
+	//
+	// Histogram Name: myapp_http_response_time_ms
+	// Histogram Labels: region=us-east-1
+	//
+	// Gauge Name: myapp_active_users
+	// All metrics have 4 default tags
+	//
+	// Custom Counter env: staging
+	// Custom Counter instance: i-123
+}
