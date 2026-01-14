@@ -238,6 +238,30 @@ func TestHistogram_Quantiles(t *testing.T) {
 	assert.InDelta(t, 95.0, p95, 10.0)
 }
 
+func TestHistogram_Percentile(t *testing.T) {
+	histogram := NewHistogram("percentile_histogram",
+		WithBuckets(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+	)
+
+	// Add values: 0-99
+	for i := range 100 {
+		histogram.Observe(float64(i))
+	}
+
+	// P50 should be around 50
+	p50 := histogram.Percentile(0.5)
+	assert.InDelta(t, 50.0, p50, 10.0)
+
+	// P95 should be around 95
+	p95 := histogram.Percentile(0.95)
+	assert.InDelta(t, 95.0, p95, 10.0)
+
+	// Percentile and Quantile should return the same value
+	assert.Equal(t, histogram.Percentile(0.5), histogram.Quantile(0.5))
+	assert.Equal(t, histogram.Percentile(0.95), histogram.Quantile(0.95))
+	assert.Equal(t, histogram.Percentile(0.99), histogram.Quantile(0.99))
+}
+
 func TestHistogram_Exemplars(t *testing.T) {
 	histogram := NewHistogram("exemplar_histogram")
 
@@ -302,6 +326,71 @@ func TestHistogram_Reset(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, uint64(0), histogram.Count())
 	assert.Equal(t, 0.0, histogram.Sum())
+}
+
+func TestHistogram_Buckets(t *testing.T) {
+	// Create histogram with custom buckets
+	histogram := NewHistogram("bucket_histogram",
+		WithBuckets(10, 20, 30, 40, 50),
+	)
+
+	// Observe values in different buckets
+	histogram.Observe(5)   // bucket 10
+	histogram.Observe(15)  // bucket 20
+	histogram.Observe(15)  // bucket 20
+	histogram.Observe(25)  // bucket 30
+	histogram.Observe(35)  // bucket 40
+	histogram.Observe(45)  // bucket 50
+	histogram.Observe(100) // bucket +Inf (last bucket)
+
+	buckets := histogram.Buckets()
+	assert.NotNil(t, buckets)
+	assert.Equal(t, 5, len(buckets), "Should have 5 buckets")
+
+	// Verify bucket boundaries are present
+	assert.Contains(t, buckets, 10.0)
+	assert.Contains(t, buckets, 20.0)
+	assert.Contains(t, buckets, 30.0)
+	assert.Contains(t, buckets, 40.0)
+	assert.Contains(t, buckets, 50.0)
+
+	// Verify bucket counts
+	assert.Equal(t, uint64(1), buckets[10.0], "Bucket 10 should have 1 observation")
+	assert.Equal(t, uint64(2), buckets[20.0], "Bucket 20 should have 2 observations")
+	assert.Equal(t, uint64(1), buckets[30.0], "Bucket 30 should have 1 observation")
+	assert.Equal(t, uint64(1), buckets[40.0], "Bucket 40 should have 1 observation")
+	assert.Equal(t, uint64(1), buckets[50.0], "Bucket 50 should have 1 observation")
+}
+
+func TestHistogram_Buckets_DefaultBuckets(t *testing.T) {
+	histogram := NewHistogram("default_bucket_histogram")
+
+	// Add some observations
+	histogram.Observe(1)
+	histogram.Observe(50)
+	histogram.Observe(500)
+	histogram.Observe(5000)
+
+	buckets := histogram.Buckets()
+	assert.NotNil(t, buckets)
+	assert.Greater(t, len(buckets), 0, "Should have buckets")
+
+	// Verify it returns the default bucket structure
+	assert.Contains(t, buckets, 10.0)
+	assert.Contains(t, buckets, 100.0)
+	assert.Contains(t, buckets, 1000.0)
+}
+
+func TestHistogram_Buckets_Empty(t *testing.T) {
+	histogram := NewHistogram("empty_bucket_histogram")
+
+	buckets := histogram.Buckets()
+	assert.NotNil(t, buckets)
+
+	// All buckets should be zero
+	for _, count := range buckets {
+		assert.Equal(t, uint64(0), count)
+	}
 }
 
 // =============================================================================
@@ -409,6 +498,21 @@ func TestTimer_BasicRecording(t *testing.T) {
 
 	mean := timer.Mean()
 	assert.InDelta(t, 200*time.Millisecond, mean, float64(10*time.Millisecond))
+}
+
+func TestTimer_Value(t *testing.T) {
+	timer := NewTimer("test_timer")
+
+	timer.Record(100 * time.Millisecond)
+	timer.Record(200 * time.Millisecond)
+	timer.Record(300 * time.Millisecond)
+
+	// Value() should return the same as Sum()
+	value := timer.Value()
+	sum := timer.Sum()
+
+	assert.Equal(t, sum, value, "Value() should equal Sum()")
+	assert.InDelta(t, 600*time.Millisecond, value, float64(10*time.Millisecond))
 }
 
 func TestTimer_TimeFunction(t *testing.T) {
@@ -1039,4 +1143,224 @@ func TestMetricsCollector_MergeDefaultOptions(t *testing.T) {
 	mcNilConfig := NewMetricsCollector("test").(*metricsCollector)
 	merged = mcNilConfig.mergeDefaultOptions(opts)
 	assert.Equal(t, opts, merged, "Should return original opts when config is nil")
+}
+
+// =============================================================================
+// LABEL CARDINALITY TESTS
+// =============================================================================
+
+func TestMetricsCollector_Cardinality_Basic(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 5, // Very low limit for testing
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create metrics with different names and label combinations
+	_ = collector.Counter("requests_v1", WithLabels(map[string]string{"endpoint": "/api/v1"}))
+	_ = collector.Counter("requests_v2", WithLabels(map[string]string{"endpoint": "/api/v2"}))
+	_ = collector.Counter("requests_v3", WithLabels(map[string]string{"endpoint": "/api/v3"}))
+
+	stats := collector.Stats()
+	assert.Equal(t, 3, stats.LabelCardinality, "Should track 3 label combinations")
+	assert.Equal(t, 5, stats.MaxLabelCardinality, "Should have max of 5")
+}
+
+func TestMetricsCollector_Cardinality_LimitExceeded(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 3, // Very low limit for testing
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create metrics up to the limit with different names
+	c1 := collector.Counter("requests_1", WithLabels(map[string]string{"endpoint": "/api/v1"}))
+	c2 := collector.Counter("requests_2", WithLabels(map[string]string{"endpoint": "/api/v2"}))
+	c3 := collector.Counter("requests_3", WithLabels(map[string]string{"endpoint": "/api/v3"}))
+
+	// These should all be different instances (different names)
+	assert.NotEqual(t, c1, c2)
+	assert.NotEqual(t, c2, c3)
+
+	// Try to create beyond the limit - should return basic counter without labels
+	c4 := collector.Counter("requests_4", WithLabels(map[string]string{"endpoint": "/api/v4"}))
+
+	// Should still get a counter back (not nil), but it might be a fallback
+	assert.NotNil(t, c4)
+
+	stats := collector.Stats()
+	assert.Equal(t, 3, stats.LabelCardinality, "Should not exceed max cardinality")
+}
+
+func TestMetricsCollector_Cardinality_AllMetricTypes(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 10,
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create different metric types with labels
+	_ = collector.Counter("counter", WithLabels(map[string]string{"type": "a"}))
+	_ = collector.Gauge("gauge", WithLabels(map[string]string{"type": "b"}))
+	_ = collector.Histogram("histogram", WithLabels(map[string]string{"type": "c"}))
+	_ = collector.Summary("summary", WithLabels(map[string]string{"type": "d"}))
+	_ = collector.Timer("timer", WithLabels(map[string]string{"type": "e"}))
+
+	stats := collector.Stats()
+	assert.Equal(t, 5, stats.LabelCardinality, "Should track all metric type combinations")
+}
+
+func TestMetricsCollector_Cardinality_SameLabels(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 10,
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create same metric with same labels multiple times
+	labels := map[string]string{"endpoint": "/api/v1"}
+	_ = collector.Counter("requests", WithLabels(labels))
+	_ = collector.Counter("requests", WithLabels(labels))
+	_ = collector.Counter("requests", WithLabels(labels))
+
+	stats := collector.Stats()
+	// Should only count once since it's the same combination
+	assert.LessOrEqual(t, stats.LabelCardinality, 1, "Should not double-count same combination")
+}
+
+func TestMetricsCollector_Cardinality_WithDefaultTags(t *testing.T) {
+	config := &MetricsConfig{
+		Collection: MetricsCollection{
+			DefaultTags: map[string]string{
+				"env":     "test",
+				"service": "api",
+			},
+		},
+		Limits: MetricsLimits{
+			MaxMetrics: 10,
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create metrics - default tags should be included in cardinality
+	_ = collector.Counter("requests", WithLabels(map[string]string{"endpoint": "/api/v1"}))
+	_ = collector.Counter("requests", WithLabels(map[string]string{"endpoint": "/api/v2"}))
+
+	stats := collector.Stats()
+	assert.Greater(t, stats.LabelCardinality, 0, "Should track cardinality with default tags")
+}
+
+func TestMetricsCollector_Cardinality_NoConfig(t *testing.T) {
+	collector := NewMetricsCollector("test")
+
+	// Should use default max cardinality
+	_ = collector.Counter("requests", WithLabels(map[string]string{"endpoint": "/api/v1"}))
+
+	stats := collector.Stats()
+	assert.Equal(t, MaxLabelCardinality, stats.MaxLabelCardinality, "Should use default max")
+	assert.Equal(t, 1, stats.LabelCardinality, "Should track 1 combination")
+}
+
+func TestMetricsCollector_Cardinality_Concurrent(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 100,
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	var wg sync.WaitGroup
+
+	numGoroutines := 10
+
+	wg.Add(numGoroutines)
+
+	for i := range numGoroutines {
+		go func(id int) {
+			defer wg.Done()
+
+			for j := range 5 {
+				_ = collector.Counter("requests",
+					WithLabels(map[string]string{
+						"worker": fmt.Sprintf("w%d", id),
+						"task":   fmt.Sprintf("t%d", j),
+					}))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	stats := collector.Stats()
+	// Should have up to 50 unique combinations (10 workers * 5 tasks)
+	assert.LessOrEqual(t, stats.LabelCardinality, 50, "Cardinality should be tracked correctly under concurrency")
+	assert.Greater(t, stats.LabelCardinality, 0, "Should have tracked some combinations")
+}
+
+func TestMetricsCollector_Cardinality_RespectsExistingMetrics(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 5,
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create some metrics
+	labels1 := map[string]string{"endpoint": "/api/v1"}
+	c1 := collector.Counter("requests", WithLabels(labels1))
+	c1.Inc()
+
+	// Request same metric again - should return existing
+	c2 := collector.Counter("requests", WithLabels(labels1))
+	assert.Equal(t, 1.0, c2.Value(), "Should return existing metric with same state")
+}
+
+func TestMetricsCollector_Cardinality_ConstLabels(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 10,
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create metrics with const labels
+	_ = collector.Counter("requests", WithConstLabels(map[string]string{"version": "v1"}))
+	_ = collector.Counter("requests", WithConstLabels(map[string]string{"version": "v2"}))
+
+	stats := collector.Stats()
+	assert.Greater(t, stats.LabelCardinality, 0, "Should track const labels in cardinality")
+}
+
+func TestMetricsCollector_Cardinality_MixedLabels(t *testing.T) {
+	config := &MetricsConfig{
+		Limits: MetricsLimits{
+			MaxMetrics: 10,
+		},
+	}
+
+	collector := NewMetricsCollector("test", WithConfig(config))
+
+	// Create metrics with mix of regular and const labels using different names
+	_ = collector.Counter("requests_a",
+		WithLabels(map[string]string{"endpoint": "/api/v1"}),
+		WithConstLabels(map[string]string{"version": "1.0"}))
+
+	_ = collector.Counter("requests_b",
+		WithLabels(map[string]string{"endpoint": "/api/v2"}),
+		WithConstLabels(map[string]string{"version": "1.0"}))
+
+	stats := collector.Stats()
+	assert.Equal(t, 2, stats.LabelCardinality, "Should track both combinations")
 }

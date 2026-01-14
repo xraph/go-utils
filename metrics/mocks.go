@@ -7,6 +7,20 @@ import (
 )
 
 // =============================================================================
+// COMPILE-TIME INTERFACE IMPLEMENTATION CHECKS
+// =============================================================================
+
+// Ensure all mock implementations satisfy their respective interfaces.
+var (
+	_ Metrics   = (*MockMetrics)(nil)
+	_ Counter   = (*MockCounter)(nil)
+	_ Gauge     = (*MockGauge)(nil)
+	_ Histogram = (*MockHistogram)(nil)
+	_ Summary   = (*MockSummary)(nil)
+	_ Timer     = (*MockTimer)(nil)
+)
+
+// =============================================================================
 // MOCK METRICS
 // =============================================================================
 
@@ -648,7 +662,7 @@ func (h *MockHistogram) Max() float64 {
 	return maxValue
 }
 
-func (h *MockHistogram) Quantile(q float64) float64 {
+func (h *MockHistogram) Percentile(percentile float64) float64 {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -656,13 +670,42 @@ func (h *MockHistogram) Quantile(q float64) float64 {
 		return 0
 	}
 
-	// Simple implementation - return approximate quantile
-	idx := int(q * float64(len(h.values)))
+	// Simple implementation - return approximate percentile
+	idx := int(percentile * float64(len(h.values)))
 	if idx >= len(h.values) {
 		idx = len(h.values) - 1
 	}
 
 	return h.values[idx]
+}
+
+func (h *MockHistogram) Quantile(q float64) float64 {
+	return h.Percentile(q)
+}
+
+func (h *MockHistogram) Buckets() map[float64]uint64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Create default buckets for mock
+	buckets := map[float64]uint64{
+		10:   0,
+		50:   0,
+		100:  0,
+		500:  0,
+		1000: 0,
+	}
+
+	// Count values in each bucket
+	for _, v := range h.values {
+		for boundary := range buckets {
+			if v <= boundary {
+				buckets[boundary]++
+			}
+		}
+	}
+
+	return buckets
 }
 
 func (h *MockHistogram) Exemplars() []Exemplar {
@@ -748,6 +791,10 @@ func (t *MockTimer) Count() uint64 {
 	defer t.mu.RUnlock()
 
 	return uint64(len(t.durations))
+}
+
+func (t *MockTimer) Value() time.Duration {
+	return t.Sum()
 }
 
 func (t *MockTimer) Sum() time.Duration {

@@ -55,6 +55,9 @@ type MetricMetadata struct {
 	Namespace   string            `json:"namespace,omitempty"`
 	Subsystem   string            `json:"subsystem,omitempty"`
 	ConstLabels map[string]string `json:"const_labels,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Created     time.Time         `json:"created,omitempty"`
+	Updated     time.Time         `json:"updated,omitempty"`
 }
 
 // =============================================================================
@@ -546,9 +549,19 @@ type Histogram interface {
 	// Max returns the maximum observed value.
 	Max() float64
 
+	// Percentile returns the value at the specified percentile (0.0-1.0).
+	// For example, Percentile(0.95) returns the 95th percentile value.
+	Percentile(percentile float64) float64
+
 	// Quantile returns the value at the specified quantile (0.0-1.0).
+	// Alias for Percentile for consistency with Summary.
 	// For example, Quantile(0.95) returns the 95th percentile.
 	Quantile(q float64) float64
+
+	// Buckets returns a map of bucket boundaries to observation counts.
+	// The keys are the upper bounds of each bucket, and the values are
+	// the cumulative counts of observations that fall into each bucket.
+	Buckets() map[float64]uint64
 
 	// Exemplars returns recent exemplars recorded with this histogram.
 	// Returns up to the last N exemplars (implementation-defined).
@@ -658,6 +671,11 @@ type Timer interface {
 	// Count returns the total number of recorded durations.
 	Count() uint64
 
+	// Value returns the total sum of all recorded durations.
+	// This provides API consistency with Counter and Gauge.
+	// Equivalent to Sum().
+	Value() time.Duration
+
 	// Sum returns the total sum of all recorded durations.
 	Sum() time.Duration
 
@@ -727,6 +745,8 @@ type Exporter interface {
 
 // ExporterStats contains statistics about a metrics exporter.
 type ExporterStats struct {
+	Format string `json:"format"`
+
 	// Export counts
 	ExportCount        int64 `json:"export_count"`         // Total export attempts
 	SuccessCount       int64 `json:"success_count"`        // Successful exports
@@ -786,6 +806,10 @@ type CollectorStats struct {
 	MemoryUsage    uint64 `json:"memory_usage"`    // Approximate memory usage in bytes
 	BufferSize     int    `json:"buffer_size"`     // Current buffer size
 	BufferCapacity int    `json:"buffer_capacity"` // Maximum buffer capacity
+
+	// Cardinality tracking
+	LabelCardinality    int `json:"label_cardinality"`     // Current unique label combinations
+	MaxLabelCardinality int `json:"max_label_cardinality"` // Maximum allowed label combinations
 
 	// Error tracking
 	Errors        []string  `json:"errors"`          // Recent errors (limited list)

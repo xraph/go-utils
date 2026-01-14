@@ -15,6 +15,20 @@ import (
 )
 
 // =============================================================================
+// COMPILE-TIME INTERFACE IMPLEMENTATION CHECKS
+// =============================================================================
+
+// Ensure all metric implementations satisfy their respective interfaces.
+var (
+	_ Counter   = (*counterImpl)(nil)
+	_ Gauge     = (*gaugeImpl)(nil)
+	_ Histogram = (*histogramImpl)(nil)
+	_ Summary   = (*summaryImpl)(nil)
+	_ Timer     = (*timerImpl)(nil)
+	_ Metrics   = (*metricsCollector)(nil)
+)
+
+// =============================================================================
 // METRIC CORE - Shared base for all metrics
 // =============================================================================
 
@@ -500,8 +514,8 @@ func (h *histogramImpl) Max() float64 {
 	return math.Float64frombits(h.max.Load())
 }
 
-func (h *histogramImpl) Quantile(q float64) float64 {
-	if q < 0 || q > 1 {
+func (h *histogramImpl) Percentile(percentile float64) float64 {
+	if percentile < 0 || percentile > 1 {
 		return 0
 	}
 
@@ -510,8 +524,8 @@ func (h *histogramImpl) Quantile(q float64) float64 {
 		return 0
 	}
 
-	// Find the bucket containing the quantile
-	targetRank := uint64(float64(count) * q)
+	// Find the bucket containing the percentile
+	targetRank := uint64(float64(count) * percentile)
 	cumulative := uint64(0)
 
 	h.mu.RLock()
@@ -530,6 +544,23 @@ func (h *histogramImpl) Quantile(q float64) float64 {
 	}
 
 	return 0
+}
+
+func (h *histogramImpl) Quantile(q float64) float64 {
+	return h.Percentile(q)
+}
+
+func (h *histogramImpl) Buckets() map[float64]uint64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	buckets := make(map[float64]uint64, len(h.buckets))
+
+	for i, boundary := range h.buckets {
+		buckets[boundary] = h.counts[i].Load()
+	}
+
+	return buckets
 }
 
 func (h *histogramImpl) Exemplars() []Exemplar {
@@ -820,6 +851,10 @@ func (t *timerImpl) Count() uint64 {
 	return t.histogram.Count()
 }
 
+func (t *timerImpl) Value() time.Duration {
+	return t.Sum()
+}
+
 func (t *timerImpl) Sum() time.Duration {
 	ms := t.histogram.Sum()
 
@@ -902,6 +937,7 @@ type metricsCollector struct {
 	summaries        map[string]*summaryImpl
 	timers           map[string]*timerImpl
 	customCollectors map[string]CustomCollector
+	cardinality      *LabelCardinality // Tracks label cardinality to prevent metric explosion
 	startTime        time.Time
 	started          atomic.Bool
 	logger           log.Logger
@@ -915,6 +951,12 @@ func NewMetricsCollector(name string, opts ...MetricOption) Metrics {
 		opt(options)
 	}
 
+	// Determine max cardinality from config or use default
+	maxCardinality := MaxLabelCardinality
+	if options.Config != nil && options.Config.Limits.MaxMetrics > 0 {
+		maxCardinality = options.Config.Limits.MaxMetrics
+	}
+
 	return &metricsCollector{
 		name:             name,
 		counters:         make(map[string]*counterImpl),
@@ -923,6 +965,7 @@ func NewMetricsCollector(name string, opts ...MetricOption) Metrics {
 		summaries:        make(map[string]*summaryImpl),
 		timers:           make(map[string]*timerImpl),
 		customCollectors: make(map[string]CustomCollector),
+		cardinality:      NewLabelCardinality(maxCardinality),
 		startTime:        time.Now(),
 		logger:           options.Logger,
 		config:           options.Config,
@@ -950,6 +993,64 @@ func (mc *metricsCollector) Stop(ctx context.Context) error {
 func (mc *metricsCollector) Health(ctx context.Context) error {
 	if !mc.started.Load() {
 		return ErrNotStarted
+	}
+
+	return nil
+}
+
+// extractLabels extracts all labels from metric options for cardinality tracking.
+func (mc *metricsCollector) extractLabels(opts []MetricOption) map[string]string {
+	options := &MetricOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	allLabels := make(map[string]string)
+
+	// Merge all label sources
+	if options.Labels != nil {
+		maps.Copy(allLabels, options.Labels)
+	}
+
+	if options.ConstLabels != nil {
+		maps.Copy(allLabels, options.ConstLabels)
+	}
+
+	// Include default tags from config
+	if mc.config != nil && mc.config.Collection.DefaultTags != nil {
+		maps.Copy(allLabels, mc.config.Collection.DefaultTags)
+	}
+
+	return allLabels
+}
+
+// checkAndRecordCardinality checks if creating a metric with these labels
+// would exceed cardinality limits, and records it if allowed.
+// Returns an error if the limit would be exceeded.
+func (mc *metricsCollector) checkAndRecordCardinality(metricName string, opts []MetricOption) error {
+	labels := mc.extractLabels(opts)
+
+	// Check if this combination would exceed limits
+	if !mc.cardinality.Check(metricName, labels) {
+		if mc.logger != nil {
+			mc.logger.Warn("label cardinality limit reached",
+				log.String("metric", metricName),
+				log.Int("current_cardinality", mc.cardinality.GetCardinality()),
+				log.String("labels", TagsToString(labels)))
+		}
+
+		return ErrCardinalityLimitExceeded
+	}
+
+	// Record this combination
+	if err := mc.cardinality.Record(metricName, labels); err != nil {
+		if mc.logger != nil {
+			mc.logger.Error("failed to record metric cardinality",
+				log.String("metric", metricName),
+				log.Error(err))
+		}
+
+		return err
 	}
 
 	return nil
@@ -994,6 +1095,25 @@ func (mc *metricsCollector) Counter(name string, opts ...MetricOption) Counter {
 		return counter
 	}
 
+	// Check cardinality limits before creating metric
+	if err := mc.checkAndRecordCardinality(name, opts); err != nil {
+		// Return existing metric without labels or create a no-op version
+		// This prevents metric explosion while allowing the system to continue
+		if mc.logger != nil {
+			mc.logger.Warn("returning existing counter without new labels due to cardinality limit",
+				log.String("metric", name))
+		}
+		// Return a basic counter without the problematic labels
+		if existing, ok := mc.counters[name]; ok {
+			return existing
+		}
+		// Create a basic counter without labels
+		counter := NewCounter(name)
+		mc.counters[name] = counter
+
+		return counter
+	}
+
 	// Merge default tags from config with metric-specific options
 	mergedOpts := mc.mergeDefaultOptions(opts)
 	counter := NewCounter(name, mergedOpts...)
@@ -1011,6 +1131,23 @@ func (mc *metricsCollector) Gauge(name string, opts ...MetricOption) Gauge {
 	}
 
 	if gauge, exists := mc.gauges[name]; exists {
+		return gauge
+	}
+
+	// Check cardinality limits before creating metric
+	if err := mc.checkAndRecordCardinality(name, opts); err != nil {
+		if mc.logger != nil {
+			mc.logger.Warn("returning existing gauge without new labels due to cardinality limit",
+				log.String("metric", name))
+		}
+
+		if existing, ok := mc.gauges[name]; ok {
+			return existing
+		}
+
+		gauge := NewGauge(name)
+		mc.gauges[name] = gauge
+
 		return gauge
 	}
 
@@ -1034,6 +1171,23 @@ func (mc *metricsCollector) Histogram(name string, opts ...MetricOption) Histogr
 		return histogram
 	}
 
+	// Check cardinality limits before creating metric
+	if err := mc.checkAndRecordCardinality(name, opts); err != nil {
+		if mc.logger != nil {
+			mc.logger.Warn("returning existing histogram without new labels due to cardinality limit",
+				log.String("metric", name))
+		}
+
+		if existing, ok := mc.histograms[name]; ok {
+			return existing
+		}
+
+		histogram := NewHistogram(name)
+		mc.histograms[name] = histogram
+
+		return histogram
+	}
+
 	// Merge default tags from config with metric-specific options
 	mergedOpts := mc.mergeDefaultOptions(opts)
 	histogram := NewHistogram(name, mergedOpts...)
@@ -1054,6 +1208,23 @@ func (mc *metricsCollector) Summary(name string, opts ...MetricOption) Summary {
 		return summary
 	}
 
+	// Check cardinality limits before creating metric
+	if err := mc.checkAndRecordCardinality(name, opts); err != nil {
+		if mc.logger != nil {
+			mc.logger.Warn("returning existing summary without new labels due to cardinality limit",
+				log.String("metric", name))
+		}
+
+		if existing, ok := mc.summaries[name]; ok {
+			return existing
+		}
+
+		summary := NewSummary(name)
+		mc.summaries[name] = summary
+
+		return summary
+	}
+
 	// Merge default tags from config with metric-specific options
 	mergedOpts := mc.mergeDefaultOptions(opts)
 	summary := NewSummary(name, mergedOpts...)
@@ -1071,6 +1242,23 @@ func (mc *metricsCollector) Timer(name string, opts ...MetricOption) Timer {
 	}
 
 	if timer, exists := mc.timers[name]; exists {
+		return timer
+	}
+
+	// Check cardinality limits before creating metric
+	if err := mc.checkAndRecordCardinality(name, opts); err != nil {
+		if mc.logger != nil {
+			mc.logger.Warn("returning existing timer without new labels due to cardinality limit",
+				log.String("metric", name))
+		}
+
+		if existing, ok := mc.timers[name]; ok {
+			return existing
+		}
+
+		timer := NewTimer(name)
+		mc.timers[name] = timer
+
 		return timer
 	}
 
@@ -1225,6 +1413,14 @@ func (mc *metricsCollector) Stats() CollectorStats {
 	totalMetrics := len(mc.counters) + len(mc.gauges) + len(mc.histograms) +
 		len(mc.summaries) + len(mc.timers)
 
+	// Get cardinality stats
+	currentCardinality := mc.cardinality.GetCardinality()
+
+	maxCardinality := MaxLabelCardinality
+	if mc.config != nil && mc.config.Limits.MaxMetrics > 0 {
+		maxCardinality = mc.config.Limits.MaxMetrics
+	}
+
 	return CollectorStats{
 		Name:                   mc.name,
 		Started:                mc.started.Load(),
@@ -1235,6 +1431,8 @@ func (mc *metricsCollector) Stats() CollectorStats {
 		MetricsByType:          metricsByType,
 		CustomCollectors:       len(mc.customCollectors),
 		ActiveCustomCollectors: len(mc.customCollectors),
+		LabelCardinality:       currentCardinality,
+		MaxLabelCardinality:    maxCardinality,
 		HealthStatus:           "healthy",
 		Degraded:               false,
 	}
@@ -1328,6 +1526,7 @@ var (
 	ErrCollectorAlreadyRegistered = &MetricError{Message: "collector already registered"}
 	ErrCollectorNotFound          = &MetricError{Message: "collector not found"}
 	ErrMetricNotFound             = &MetricError{Message: "metric not found"}
+	ErrCardinalityLimitExceeded   = &MetricError{Message: "label cardinality limit exceeded"}
 )
 
 // MetricError represents a metrics-related error.

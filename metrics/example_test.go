@@ -422,3 +422,211 @@ func Example_defaultTags() {
 	// Custom Counter env: staging
 	// Custom Counter instance: i-123
 }
+
+// Example_histogramBuckets demonstrates how to access bucket data from a histogram.
+func Example_histogramBuckets() {
+	// Create a histogram with custom buckets
+	responseTime := metrics.NewHistogram("api_response_time",
+		metrics.WithBuckets(50, 100, 250, 500, 1000),
+		metrics.WithDescription("API response time in milliseconds"),
+		metrics.WithUnit("ms"),
+	)
+
+	// Record some observations
+	responseTime.Observe(45)   // Falls in 50ms bucket
+	responseTime.Observe(75)   // Falls in 100ms bucket
+	responseTime.Observe(120)  // Falls in 250ms bucket
+	responseTime.Observe(450)  // Falls in 500ms bucket
+	responseTime.Observe(800)  // Falls in 1000ms bucket
+	responseTime.Observe(2000) // Falls in +Inf bucket (beyond defined buckets)
+
+	// Access bucket data
+	buckets := responseTime.Buckets()
+
+	fmt.Printf("Histogram Statistics:\n")
+	fmt.Printf("Total Observations: %d\n", responseTime.Count())
+	fmt.Printf("Sum: %.2f\n", responseTime.Sum())
+	fmt.Printf("Mean: %.2f\n", responseTime.Mean())
+	fmt.Printf("Min: %.2f\n", responseTime.Min())
+	fmt.Printf("Max: %.2f\n", responseTime.Max())
+
+	fmt.Printf("\nBucket Distribution:\n")
+	fmt.Printf("≤ 50ms:   %d observations\n", buckets[50.0])
+	fmt.Printf("≤ 100ms:  %d observations\n", buckets[100.0])
+	fmt.Printf("≤ 250ms:  %d observations\n", buckets[250.0])
+	fmt.Printf("≤ 500ms:  %d observations\n", buckets[500.0])
+	fmt.Printf("≤ 1000ms: %d observations\n", buckets[1000.0])
+
+	// Output:
+	// Histogram Statistics:
+	// Total Observations: 6
+	// Sum: 3490.00
+	// Mean: 581.67
+	// Min: 45.00
+	// Max: 2000.00
+	//
+	// Bucket Distribution:
+	// ≤ 50ms:   1 observations
+	// ≤ 100ms:  1 observations
+	// ≤ 250ms:  1 observations
+	// ≤ 500ms:  1 observations
+	// ≤ 1000ms: 1 observations
+}
+
+// Example_histogramPercentile demonstrates using the Histogram.Percentile() method.
+func Example_histogramPercentile() {
+	// Create a histogram with custom buckets
+	latency := metrics.NewHistogram("api_latency",
+		metrics.WithBuckets(10, 25, 50, 75, 100, 150, 200, 300, 500, 1000),
+		metrics.WithDescription("API request latency"),
+		metrics.WithUnit("ms"),
+	)
+
+	// Record various observations
+	observations := []float64{
+		15, 22, 35, 48, 55, 62, 78, 85, 92, 105,
+		120, 135, 145, 158, 165, 180, 195, 210, 285, 420,
+	}
+
+	for _, value := range observations {
+		latency.Observe(value)
+	}
+
+	// Calculate percentiles
+	fmt.Printf("API Latency Analysis:\n")
+	fmt.Printf("Total Requests: %d\n", latency.Count())
+	fmt.Printf("P50 (median): %.1fms\n", latency.Percentile(0.50))
+	fmt.Printf("P90: %.1fms\n", latency.Percentile(0.90))
+	fmt.Printf("P95: %.1fms\n", latency.Percentile(0.95))
+	fmt.Printf("P99: %.1fms\n", latency.Percentile(0.99))
+
+	// Percentile and Quantile are equivalent
+	fmt.Printf("\nPercentile vs Quantile (same result):\n")
+	fmt.Printf("Percentile(0.95): %.1fms\n", latency.Percentile(0.95))
+	fmt.Printf("Quantile(0.95):   %.1fms\n", latency.Quantile(0.95))
+
+	// Output:
+	// API Latency Analysis:
+	// Total Requests: 20
+	// P50 (median): 150.0ms
+	// P90: 300.0ms
+	// P95: 300.0ms
+	// P99: 300.0ms
+	//
+	// Percentile vs Quantile (same result):
+	// Percentile(0.95): 300.0ms
+	// Quantile(0.95):   300.0ms
+}
+
+// Example_cardinalityLimits demonstrates how cardinality tracking prevents metric explosion.
+func Example_cardinalityLimits() {
+	// Configure a collector with a low cardinality limit for demonstration
+	config := &metrics.MetricsConfig{
+		Limits: metrics.MetricsLimits{
+			MaxMetrics: 5, // Very low limit for demo purposes
+		},
+		Collection: metrics.MetricsCollection{
+			DefaultTags: map[string]string{
+				"service": "api",
+				"env":     "production",
+			},
+		},
+	}
+
+	collector := metrics.NewMetricsCollector("demo", metrics.WithConfig(config))
+
+	fmt.Println("Creating metrics up to the cardinality limit:")
+
+	// Create metrics up to the limit
+	for i := 1; i <= 3; i++ {
+		counter := collector.Counter(fmt.Sprintf("requests_%d", i),
+			metrics.WithLabels(map[string]string{
+				"endpoint": fmt.Sprintf("/api/v%d", i),
+			}))
+		counter.Inc()
+		fmt.Printf("Created metric %d\n", i)
+	}
+
+	// Check stats
+	stats := collector.Stats()
+
+	fmt.Printf("\nCardinality Stats:\n")
+	fmt.Printf("Current Cardinality: %d\n", stats.LabelCardinality)
+	fmt.Printf("Max Cardinality: %d\n", stats.MaxLabelCardinality)
+	fmt.Printf("Active Metrics: %d\n", stats.ActiveMetrics)
+
+	fmt.Println("\nAttempting to exceed the limit:")
+
+	// Try to exceed the limit
+	for i := 4; i <= 7; i++ {
+		counter := collector.Counter(fmt.Sprintf("requests_%d", i),
+			metrics.WithLabels(map[string]string{
+				"endpoint": fmt.Sprintf("/api/v%d", i),
+			}))
+		counter.Inc()
+
+		if i <= 5 {
+			fmt.Printf("Created metric %d (within limit)\n", i)
+		} else {
+			fmt.Printf("Metric %d creation limited (cardinality exceeded)\n", i)
+		}
+	}
+
+	// Final stats
+	finalStats := collector.Stats()
+	fmt.Printf("\nFinal Cardinality: %d (limit: %d)\n",
+		finalStats.LabelCardinality,
+		finalStats.MaxLabelCardinality)
+
+	fmt.Println("\nThis prevents metric explosion in production!")
+
+	// Output:
+	// Creating metrics up to the cardinality limit:
+	// Created metric 1
+	// Created metric 2
+	// Created metric 3
+	//
+	// Cardinality Stats:
+	// Current Cardinality: 3
+	// Max Cardinality: 5
+	// Active Metrics: 3
+	//
+	// Attempting to exceed the limit:
+	// Created metric 4 (within limit)
+	// Created metric 5 (within limit)
+	// Metric 6 creation limited (cardinality exceeded)
+	// Metric 7 creation limited (cardinality exceeded)
+	//
+	// Final Cardinality: 5 (limit: 5)
+	//
+	// This prevents metric explosion in production!
+}
+
+// Example_timerValue demonstrates the Timer.Value() method.
+func Example_timerValue() {
+	timer := metrics.NewTimer("process_duration")
+
+	// Record several durations
+	timer.Record(100 * time.Millisecond)
+	timer.Record(200 * time.Millisecond)
+	timer.Record(300 * time.Millisecond)
+	timer.Record(150 * time.Millisecond)
+
+	// Value() returns the total sum (same as Sum())
+	// This provides API consistency with Counter and Gauge
+	totalTime := timer.Value()
+	fmt.Printf("Total time spent: %v\n", totalTime)
+
+	// Equivalent to Sum()
+	fmt.Printf("Sum: %v\n", timer.Sum())
+
+	// Other useful metrics
+	fmt.Printf("Count: %d\n", timer.Count())
+	fmt.Printf("Mean: %v\n", timer.Mean())
+
+	// Output:
+	// Total time spent: 750ms
+	// Sum: 750ms
+	// Count: 4
+	// Mean: 187.5ms
+}

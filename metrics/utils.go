@@ -95,6 +95,16 @@ func ParseTags(tags ...string) map[string]string {
 	return result
 }
 
+// ParseTagsOptions parses tags from options.
+func ParseTagsOptions(defaultTags map[string]string, opts ...MetricOption) map[string]string {
+	opts1 := MetricOptions{}
+	for _, opt := range opts {
+		opt(&opts1)
+	}
+
+	return MergeTags(defaultTags, opts1.Labels)
+}
+
 // MergeTags merges multiple tag maps with validation.
 func MergeTags(tagMaps ...map[string]string) map[string]string {
 	result := make(map[string]string)
