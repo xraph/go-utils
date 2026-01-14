@@ -56,8 +56,8 @@ type MetricMetadata struct {
 	Subsystem   string            `json:"subsystem,omitempty"`
 	ConstLabels map[string]string `json:"const_labels,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
-	Created     time.Time         `json:"created,omitempty"`
-	Updated     time.Time         `json:"updated,omitempty"`
+	Created     time.Time         `json:"created,omitzero"`
+	Updated     time.Time         `json:"updated,omitzero"`
 }
 
 // =============================================================================
