@@ -435,7 +435,8 @@ func (hr *HealthReport) AddResults(results []*HealthResult) {
 	for _, result := range results {
 		hr.Services[result.Name] = result
 	}
-	hr.CalculateStats()
+
+	_ = hr.CalculateStats()
 }
 
 func (hr *HealthReport) HealthStats() HealthReportStats {
@@ -529,6 +530,7 @@ func (hr *HealthReport) CalculateStats() *HealthReport {
 	}
 
 	hr.Stats = stats
+
 	return hr
 }
 
