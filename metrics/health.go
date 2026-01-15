@@ -390,10 +390,21 @@ func (hr *HealthResult) IsCritical() bool {
 	return hr.Critical
 }
 
+// HealthReportStats contains statistics about services in a health report.
+type HealthReportStats struct {
+	Total          int `json:"total"`
+	Healthy        int `json:"healthy"`
+	Degraded       int `json:"degraded"`
+	Unhealthy      int `json:"unhealthy"`
+	Critical       int `json:"critical"`
+	FailedCritical int `json:"failed_critical"`
+}
+
 // HealthReport represents a comprehensive health report.
 type HealthReport struct {
 	Overall     HealthStatus             `json:"overall"`
 	Services    map[string]*HealthResult `json:"services"`
+	Stats       HealthReportStats        `json:"stats"`
 	Timestamp   time.Time                `json:"timestamp"`
 	Duration    time.Duration            `json:"duration"`
 	Version     string                   `json:"version"`
@@ -413,16 +424,42 @@ func NewHealthReport() *HealthReport {
 	}
 }
 
-// AddResult adds a health result to the report.
+// AddResult adds a health result to the report and updates statistics.
 func (hr *HealthReport) AddResult(result *HealthResult) {
 	hr.Services[result.Name] = result
+	hr.CalculateStats()
 }
 
-// AddResults adds multiple health results to the report.
+// AddResults adds multiple health results to the report and updates statistics.
 func (hr *HealthReport) AddResults(results []*HealthResult) {
 	for _, result := range results {
-		hr.AddResult(result)
+		hr.Services[result.Name] = result
 	}
+	hr.CalculateStats()
+}
+
+func (hr *HealthReport) HealthStats() HealthReportStats {
+	return hr.Stats
+}
+
+func (hr *HealthReport) HealthyCount() int {
+	return hr.Stats.Healthy
+}
+
+func (hr *HealthReport) DegradedCount() int {
+	return hr.Stats.Degraded
+}
+
+func (hr *HealthReport) UnhealthyCount() int {
+	return hr.Stats.Unhealthy
+}
+
+func (hr *HealthReport) CriticalCount() int {
+	return hr.Stats.Critical
+}
+
+func (hr *HealthReport) FailedCriticalCount() int {
+	return hr.Stats.FailedCritical
 }
 
 // WithVersion sets the version information.
@@ -464,6 +501,34 @@ func (hr *HealthReport) WithDuration(duration time.Duration) *HealthReport {
 func (hr *HealthReport) WithMetadata(metadata map[string]any) *HealthReport {
 	maps.Copy(hr.Metadata, metadata)
 
+	return hr
+}
+
+// CalculateStats computes and updates the statistics for the health report.
+func (hr *HealthReport) CalculateStats() *HealthReport {
+	stats := HealthReportStats{
+		Total: len(hr.Services),
+	}
+
+	for _, result := range hr.Services {
+		switch {
+		case result.IsHealthy():
+			stats.Healthy++
+		case result.IsDegraded():
+			stats.Degraded++
+		case result.IsUnhealthy():
+			stats.Unhealthy++
+		}
+
+		if result.IsCritical() {
+			stats.Critical++
+			if result.IsUnhealthy() {
+				stats.FailedCritical++
+			}
+		}
+	}
+
+	hr.Stats = stats
 	return hr
 }
 
