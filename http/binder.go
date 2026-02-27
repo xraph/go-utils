@@ -281,8 +281,8 @@ func (c *Ctx) bindBodyFields(v any, rt reflect.Type) error {
 // parseTagName extracts the parameter name from a tag value
 // Handles formats like: "paramName", "paramName,omitempty".
 func parseTagName(tag string) string {
-	if idx := strings.Index(tag, ","); idx != -1 {
-		return strings.TrimSpace(tag[:idx])
+	if name, _, ok := strings.Cut(tag, ","); ok {
+		return strings.TrimSpace(name)
 	}
 
 	return strings.TrimSpace(tag)

@@ -69,8 +69,8 @@ func GetFieldName(field reflect.StructField) string {
 
 // parseTagName extracts the name part from a tag value (before comma).
 func parseTagName(tagValue string) string {
-	if idx := strings.Index(tagValue, ","); idx != -1 {
-		return tagValue[:idx]
+	if name, _, ok := strings.Cut(tagValue, ","); ok {
+		return name
 	}
 
 	return tagValue

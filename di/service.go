@@ -49,10 +49,12 @@ func ServiceName(v any) string {
 			return name
 		}
 	}
+
 	t := reflect.TypeOf(v)
 	for t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
+
 	return t.PkgPath() + "." + t.Name()
 }
 

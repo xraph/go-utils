@@ -46,7 +46,7 @@ func (f ZapField) Value() any {
 	case zapcore.Uint8Type:
 		return uint8(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.UintptrType:
-		return uintptr(f.zapField.Integer)
+		return uintptr(f.zapField.Integer) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Float64Type:
 		return math.Float64frombits(uint64(f.zapField.Integer)) //nolint:gosec // intentional conversion from stored int64
 	case zapcore.Float32Type:
@@ -385,9 +385,11 @@ var (
 		if id := RequestIDFromContext(ctx); id != "" {
 			fields = append(fields, String("request_id", id))
 		}
+
 		if id := TraceIDFromContext(ctx); id != "" {
 			fields = append(fields, String("trace_id", id))
 		}
+
 		if id := UserIDFromContext(ctx); id != "" {
 			fields = append(fields, String("user_id", id))
 		}
