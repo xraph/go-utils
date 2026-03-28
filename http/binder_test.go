@@ -432,9 +432,9 @@ func TestIsBindFieldRequired_OptionalTag(t *testing.T) {
 
 func TestIsBindFieldRequired_DefaultTag(t *testing.T) {
 	type TestStruct struct {
-		WithDefault    string `default:"hello" query:"with_default"`
+		WithDefault    string `default:"hello"         query:"with_default"`
 		WithoutDefault string `query:"without_default"`
-		DefaultAndReq  string `default:"hello" query:"default_and_req" required:"true"`
+		DefaultAndReq  string `default:"hello"         query:"default_and_req" required:"true"`
 	}
 
 	rt := reflect.TypeFor[TestStruct]()
@@ -495,7 +495,7 @@ func TestIsValidationFieldRequired(t *testing.T) {
 		HeaderOmit      string `header:"headerOmit,omitempty"`
 		BodyOmit        string `body:"bodyOmit,omitempty"`
 		DefaultField    string `json:"default"`
-		DefaultTagField string `json:"defaultTag" default:"hello"`
+		DefaultTagField string `default:"hello"               json:"defaultTag"`
 	}
 
 	rt := reflect.TypeFor[TestStruct]()
