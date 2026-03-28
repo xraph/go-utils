@@ -571,7 +571,7 @@ func (c *Ctx) SetCookie(name, value string, maxAge int) {
 
 // SetCookieWithOptions sets a cookie with full control over options.
 func (c *Ctx) SetCookieWithOptions(name, value string, path, domain string, maxAge int, secure, httpOnly bool) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure and httpOnly are caller-controlled by design
 		Name:     name,
 		Value:    value,
 		Path:     path,
@@ -593,6 +593,7 @@ func (c *Ctx) DeleteCookie(name string) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(c.response, cookie)
 }
