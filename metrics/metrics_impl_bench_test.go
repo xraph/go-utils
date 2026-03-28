@@ -448,15 +448,11 @@ func benchmarkConcurrentCounter(b *testing.B, counter *counterImpl, numWorkers i
 	opsPerWorker := b.N / numWorkers
 
 	for range numWorkers {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for range opsPerWorker {
 				counter.Inc()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
