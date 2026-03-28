@@ -292,9 +292,10 @@ func parseTagName(tag string) string {
 // Uses consistent precedence order:
 // 1. optional:"true" - explicitly optional (highest priority)
 // 2. required:"true" - explicitly required
-// 3. omitempty in tag - optional
-// 4. pointer type - optional
-// 5. default: non-pointer types are required.
+// 3. default:"..." - fields with defaults are implicitly optional
+// 4. omitempty in tag - optional
+// 5. pointer type - optional
+// 6. default: non-pointer types are required.
 func isBindFieldRequired(field reflect.StructField, tag string) bool {
 	// 1. Explicit optional tag takes precedence (opt-out)
 	if field.Tag.Get("optional") == "true" {
@@ -306,24 +307,29 @@ func isBindFieldRequired(field reflect.StructField, tag string) bool {
 		return true
 	}
 
-	// 3. Check for omitempty in the parameter tag (query, header, etc.)
+	// 3. Fields with default values are implicitly optional
+	if field.Tag.Get("default") != "" {
+		return false
+	}
+
+	// 4. Check for omitempty in the parameter tag (query, header, etc.)
 	if strings.Contains(tag, ",omitempty") {
 		return false
 	}
 
-	// 4. Check JSON tag for omitempty (for body fields)
+	// 5. Check JSON tag for omitempty (for body fields)
 	if jsonTag := field.Tag.Get("json"); jsonTag != "" {
 		if strings.Contains(jsonTag, ",omitempty") {
 			return false
 		}
 	}
 
-	// 5. Pointer types are optional by default
+	// 6. Pointer types are optional by default
 	if field.Type.Kind() == reflect.Ptr {
 		return false
 	}
 
-	// 6. Non-pointer types without above markers are required
+	// 7. Non-pointer types without above markers are required
 	return true
 }
 

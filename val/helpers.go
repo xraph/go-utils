@@ -19,9 +19,10 @@ var (
 // Uses consistent precedence order:
 // 1. optional:"true" - explicitly optional (highest priority)
 // 2. required:"true" - explicitly required
-// 3. omitempty in json/query/header/body tags - optional
-// 4. pointer type - optional
-// 5. default: non-pointer types are required.
+// 3. default:"..." - fields with defaults are implicitly optional
+// 4. omitempty in json/query/header/body tags - optional
+// 5. pointer type - optional
+// 6. default: non-pointer types are required.
 func IsFieldRequired(field reflect.StructField) bool {
 	// 1. Explicit optional tag takes precedence (opt-out)
 	if field.Tag.Get("optional") == "true" {
@@ -33,7 +34,12 @@ func IsFieldRequired(field reflect.StructField) bool {
 		return true
 	}
 
-	// 3. Check for omitempty in various tags
+	// 3. Fields with default values are implicitly optional
+	if field.Tag.Get("default") != "" {
+		return false
+	}
+
+	// 4. Check for omitempty in various tags
 	tags := []string{"json", "query", "header", "body"}
 	for _, tagName := range tags {
 		if tagValue := field.Tag.Get(tagName); tagValue != "" {
@@ -43,12 +49,12 @@ func IsFieldRequired(field reflect.StructField) bool {
 		}
 	}
 
-	// 4. Pointer types are optional by default
+	// 5. Pointer types are optional by default
 	if field.Type.Kind() == reflect.Ptr {
 		return false
 	}
 
-	// 5. Non-pointer types without above markers are required
+	// 6. Non-pointer types without above markers are required
 	return true
 }
 

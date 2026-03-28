@@ -430,6 +430,28 @@ func TestIsBindFieldRequired_OptionalTag(t *testing.T) {
 	assert.True(t, isBindFieldRequired(field, field.Tag.Get("query")))
 }
 
+func TestIsBindFieldRequired_DefaultTag(t *testing.T) {
+	type TestStruct struct {
+		WithDefault    string `default:"hello" query:"with_default"`
+		WithoutDefault string `query:"without_default"`
+		DefaultAndReq  string `default:"hello" query:"default_and_req" required:"true"`
+	}
+
+	rt := reflect.TypeFor[TestStruct]()
+
+	// field with default tag should NOT be required
+	field, _ := rt.FieldByName("WithDefault")
+	assert.False(t, isBindFieldRequired(field, field.Tag.Get("query")))
+
+	// field without default tag should be required (non-pointer)
+	field, _ = rt.FieldByName("WithoutDefault")
+	assert.True(t, isBindFieldRequired(field, field.Tag.Get("query")))
+
+	// required:"true" takes precedence over default tag
+	field, _ = rt.FieldByName("DefaultAndReq")
+	assert.True(t, isBindFieldRequired(field, field.Tag.Get("query")))
+}
+
 func TestIsBindFieldRequired_Omitempty(t *testing.T) {
 	type TestStruct struct {
 		Omitempty string `query:"name,omitempty"`
@@ -466,13 +488,14 @@ func TestIsBindFieldRequired_Pointer(t *testing.T) {
 
 func TestIsValidationFieldRequired(t *testing.T) {
 	type TestStruct struct {
-		Optional     string `json:"opt"                    optional:"true"`
-		Required     string `json:"req"                    required:"true"`
-		JsonOmit     string `json:"jsonOmit,omitempty"`
-		QueryOmit    string `query:"queryOmit,omitempty"`
-		HeaderOmit   string `header:"headerOmit,omitempty"`
-		BodyOmit     string `body:"bodyOmit,omitempty"`
-		DefaultField string `json:"default"`
+		Optional        string `json:"opt"                    optional:"true"`
+		Required        string `json:"req"                    required:"true"`
+		JsonOmit        string `json:"jsonOmit,omitempty"`
+		QueryOmit       string `query:"queryOmit,omitempty"`
+		HeaderOmit      string `header:"headerOmit,omitempty"`
+		BodyOmit        string `body:"bodyOmit,omitempty"`
+		DefaultField    string `json:"default"`
+		DefaultTagField string `json:"defaultTag" default:"hello"`
 	}
 
 	rt := reflect.TypeFor[TestStruct]()
@@ -488,6 +511,7 @@ func TestIsValidationFieldRequired(t *testing.T) {
 		{"HeaderOmit", false},
 		{"BodyOmit", false},
 		{"DefaultField", true},
+		{"DefaultTagField", false},
 	}
 
 	for _, tt := range tests {
@@ -565,6 +589,47 @@ func TestBindRequest_EmbeddedOptional_NoRequired(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "Test", bindReq.Name)
+}
+
+// Test that default tag alone (without optional) makes field not required and applies default.
+type DefaultTagOnlyRequest struct {
+	Name  string `query:"name"`
+	Page  int    `default:"1"  query:"page"`
+	Limit int    `default:"10" query:"limit"`
+}
+
+func TestBindRequest_DefaultTagImplicitlyOptional(t *testing.T) {
+	// Only provide name, omit page and limit — defaults should be applied
+	req := httptest.NewRequest(http.MethodGet, "/test?name=John", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := NewContext(rec, req, nil).(*Ctx)
+
+	var bindReq DefaultTagOnlyRequest
+
+	err := ctx.BindRequest(&bindReq)
+	require.NoError(t, err)
+
+	assert.Equal(t, "John", bindReq.Name)
+	assert.Equal(t, 1, bindReq.Page)   // default applied
+	assert.Equal(t, 10, bindReq.Limit) // default applied
+}
+
+func TestBindRequest_DefaultTagWithExplicitValues(t *testing.T) {
+	// Provide explicit values — should override defaults
+	req := httptest.NewRequest(http.MethodGet, "/test?name=John&page=5&limit=50", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := NewContext(rec, req, nil).(*Ctx)
+
+	var bindReq DefaultTagOnlyRequest
+
+	err := ctx.BindRequest(&bindReq)
+	require.NoError(t, err)
+
+	assert.Equal(t, "John", bindReq.Name)
+	assert.Equal(t, 5, bindReq.Page)
+	assert.Equal(t, 50, bindReq.Limit)
 }
 
 // Test struct for TextUnmarshaler support (e.g., xid.ID).
