@@ -129,7 +129,7 @@ bench-compare:
 lint:
 	@echo "$(COLOR_GREEN)Running linter...$(COLOR_RESET)"
 	@if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
-		$(GOLANGCI_LINT) run $(LINT_DIRS) --timeout=5m; \
+		$(GOLANGCI_LINT) run $(LINT_DIRS) --timeout=5m && \
 		echo "$(COLOR_GREEN)✓ Linting passed$(COLOR_RESET)"; \
 	else \
 		echo "$(COLOR_RED)Error: golangci-lint not found. Run 'make install-tools' to install$(COLOR_RESET)"; \
@@ -215,7 +215,7 @@ deps-update:
 security:
 	@echo "$(COLOR_GREEN)Running security scan...$(COLOR_RESET)"
 	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -exclude=G115 -exclude-dir=vendor ./...; \
+		gosec -exclude=G115 -exclude-dir=vendor ./... && \
 		echo "$(COLOR_GREEN)✓ Security scan completed$(COLOR_RESET)"; \
 	else \
 		echo "$(COLOR_YELLOW)Warning: gosec not found. Run 'make install-tools' to install$(COLOR_RESET)"; \
