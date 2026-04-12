@@ -204,11 +204,6 @@ linters:
       - linters:
           - staticcheck
         text: "SA9003:"
-      # Exclude gosec G115 (integer overflow) for uintptr conversion in log/fields.go
-      - path: log/fields\.go
-        linters:
-          - gosec
-        text: "G115:"
       # Exclude `lll` issues for long lines with `go:generate`.
       - linters:
           - lll
