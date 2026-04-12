@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xraph/go-utils/di"
@@ -23,18 +25,31 @@ type ContextWithClean interface {
 	Cleanup()
 }
 
+// ctxPool reuses Ctx instances to reduce GC pressure on the hot path.
+// Each pooled Ctx has pre-allocated maps for params and values.
+var ctxPool = sync.Pool{
+	New: func() any {
+		return &Ctx{
+			params: make(map[string]string, 8),
+			values: make(map[string]any, 8),
+		}
+	},
+}
+
 // Ctx implements Context interface.
 type Ctx struct {
 	request       *http.Request
 	response      http.ResponseWriter
 	params        map[string]string
 	values        map[string]any
+	query         url.Values // cached parsed query params (lazy)
 	scope         di.Scope
 	container     di.Container
 	metrics       Metrics
 	healthManager HealthManager
 	session       Session
-	sessionStore  any // Will be SessionStore interface from security extension
+	sessionStore  any  // Will be SessionStore interface from security extension
+	ownParams     bool // true if params map is owned (pooled), false if borrowed from router
 }
 
 // httpResponseBuilder provides fluent response building.
@@ -43,30 +58,42 @@ type httpResponseBuilder struct {
 	status int
 }
 
-// NewContext creates a new context.
+// NewContext creates a new context from the pool.
+//
+// The DI scope is created lazily on the first call to Scope() or Resolve(),
+// so requests that never use DI pay zero allocation cost for scope creation.
+// The Ctx is returned to the pool on Cleanup().
 func NewContext(w http.ResponseWriter, r *http.Request, container di.Container) Context {
-	var scope di.Scope
-	if container != nil {
-		scope = container.BeginScope()
-	}
+	c := ctxPool.Get().(*Ctx)
+	c.request = r
+	c.response = w
+	c.container = container
+	c.query = nil // reset cached query
+	c.scope = nil // lazy — allocated on first Scope()/Resolve() call
+	c.metrics = nil
+	c.healthManager = nil
+	c.session = nil
+	c.sessionStore = nil
 
-	// Extract params from request context (set by router adapter)
-	params := make(map[string]string)
-	// Use the same key type as the router adapter
+	// Extract params from request context (set by router adapter).
+	// Use the router's map directly instead of copying — avoids an allocation.
 	if p := r.Context().Value("forge:params"); p != nil {
 		if paramMap, ok := p.(map[string]string); ok {
-			params = paramMap
+			c.params = paramMap
+			c.ownParams = false
+		} else {
+			clear(c.params)
+			c.ownParams = true
 		}
+	} else {
+		clear(c.params)
+		c.ownParams = true
 	}
 
-	return &Ctx{
-		request:   r,
-		response:  w,
-		params:    params,
-		values:    make(map[string]any),
-		scope:     scope,
-		container: container,
-	}
+	// Clear values map for reuse
+	clear(c.values)
+
+	return c
 }
 
 // Request returns the HTTP request.
@@ -169,14 +196,25 @@ func (c *Ctx) ParamBoolDefault(name string, defaultValue bool) bool {
 	return val
 }
 
+// queryValues returns parsed query parameters, caching the result.
+// Go's URL.Query() re-parses the query string on every call;
+// this avoids redundant parsing when Query() is called multiple times.
+func (c *Ctx) queryValues() url.Values {
+	if c.query == nil {
+		c.query = c.request.URL.Query()
+	}
+
+	return c.query
+}
+
 // Query returns a query parameter.
 func (c *Ctx) Query(name string) string {
-	return c.request.URL.Query().Get(name)
+	return c.queryValues().Get(name)
 }
 
 // QueryDefault returns a query parameter with default value.
 func (c *Ctx) QueryDefault(name, defaultValue string) string {
-	val := c.request.URL.Query().Get(name)
+	val := c.queryValues().Get(name)
 	if val == "" {
 		return defaultValue
 	}
@@ -513,15 +551,20 @@ func (c *Ctx) HealthManager() HealthManager {
 	return c.healthManager
 }
 
-// Scope returns the request scope.
+// Scope returns the request-scoped DI scope, creating it lazily on first access.
+// Requests that never call Scope() or Resolve() pay zero cost for scope creation.
 func (c *Ctx) Scope() di.Scope {
+	if c.scope == nil && c.container != nil {
+		c.scope = c.container.BeginScope()
+	}
+
 	return c.scope
 }
 
-// Resolve resolves a service from the scope.
+// Resolve resolves a service from the request scope (created lazily).
 func (c *Ctx) Resolve(name string) (any, error) {
-	if c.scope != nil {
-		return c.scope.Resolve(name)
+	if scope := c.Scope(); scope != nil {
+		return scope.Resolve(name)
 	}
 
 	if c.container != nil {
@@ -749,19 +792,50 @@ func (c *Ctx) setParam(key, value string) {
 // cleanup ends the scope (should be called after request).
 func (c *Ctx) cleanup() {
 	// Clean up multipart form if it was parsed
-	if c.request.MultipartForm != nil {
+	if c.request != nil && c.request.MultipartForm != nil {
 		_ = c.request.MultipartForm.RemoveAll()
 	}
 
-	// End DI scope
+	// End DI scope (only if it was lazily created)
 	if c.scope != nil {
 		_ = c.scope.End()
+		c.scope = nil
 	}
 }
 
-// Cleanup ends the scope (should be called after request).
+// Cleanup ends the scope and returns the Ctx to the pool for reuse.
 func (c *Ctx) Cleanup() {
 	c.cleanup()
+
+	// Clear references so the GC can collect request/response objects
+	c.request = nil
+	c.response = nil
+	c.container = nil
+	c.session = nil
+	c.sessionStore = nil
+	c.metrics = nil
+	c.healthManager = nil
+	c.query = nil
+
+	// Restore owned params map if we borrowed the router's map
+	if !c.ownParams {
+		c.params = make(map[string]string, 8)
+		c.ownParams = true
+	}
+
+	ctxPool.Put(c)
+}
+
+// Values returns the internal values map for sharing between contexts.
+// Used by middleware bridges to avoid per-hop value copying.
+func (c *Ctx) Values() map[string]any {
+	return c.values
+}
+
+// ShareValues replaces the values map with a shared reference.
+// Used by middleware bridges to propagate values without copying.
+func (c *Ctx) ShareValues(v map[string]any) {
+	c.values = v
 }
 
 // Status sets the HTTP status code and returns a builder for chaining.
