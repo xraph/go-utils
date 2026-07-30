@@ -30,8 +30,10 @@ type ContextWithClean interface {
 var ctxPool = sync.Pool{
 	New: func() any {
 		return &Ctx{
-			params: make(map[string]string, 8),
-			values: make(map[string]any, 8),
+			params:    make(map[string]string, 8),
+			values:    make(map[string]any, 8),
+			ownParams: true,
+			ownValues: true,
 		}
 	},
 }
@@ -50,6 +52,7 @@ type Ctx struct {
 	session       Session
 	sessionStore  any  // Will be SessionStore interface from security extension
 	ownParams     bool // true if params map is owned (pooled), false if borrowed from router
+	ownValues     bool // true if values map is owned (pooled), false if borrowed via ShareValues
 }
 
 // httpResponseBuilder provides fluent response building.
@@ -90,8 +93,16 @@ func NewContext(w http.ResponseWriter, r *http.Request, container di.Container) 
 		c.ownParams = true
 	}
 
-	// Clear values map for reuse
-	clear(c.values)
+	// Prepare the values map for reuse. If the previous user borrowed a foreign
+	// map via ShareValues, take a fresh owned one instead of clearing — clearing
+	// would wipe a map another request still holds. Cleanup normally restores
+	// ownership before pooling, so this is the belt to that braces.
+	if c.ownValues {
+		clear(c.values)
+	} else {
+		c.values = make(map[string]any, 8)
+		c.ownValues = true
+	}
 
 	return c
 }
@@ -823,6 +834,15 @@ func (c *Ctx) Cleanup() {
 		c.ownParams = true
 	}
 
+	// Same for the values map if a middleware bridge shared one in via
+	// ShareValues. This must happen before the Put below: a pooled Ctx holding
+	// another request's map is the cross-request corruption ShareValues warns
+	// about.
+	if !c.ownValues {
+		c.values = make(map[string]any, 8)
+		c.ownValues = true
+	}
+
 	ctxPool.Put(c)
 }
 
@@ -834,8 +854,34 @@ func (c *Ctx) Values() map[string]any {
 
 // ShareValues replaces the values map with a shared reference.
 // Used by middleware bridges to propagate values without copying.
+//
+// The borrow is recorded, so Cleanup hands this Ctx a private map before
+// returning it to the pool. Without that, the pooled Ctx would carry a pointer
+// to the lender's map: the next request to draw it would clear and overwrite
+// values belonging to a request still in flight. Since that map holds request
+// identity and tenant scope, the effect is cross-request data corruption rather
+// than a stale read.
 func (c *Ctx) ShareValues(v map[string]any) {
 	c.values = v
+	c.ownValues = false
+}
+
+// ReleaseSharedValues gives this Ctx a private values map again, ending any
+// borrow established by ShareValues. Cleanup does this automatically; call it
+// directly only to stop sharing while continuing to use the Ctx.
+func (c *Ctx) ReleaseSharedValues() {
+	if c.ownValues {
+		return
+	}
+
+	c.values = make(map[string]any, 8)
+	c.ownValues = true
+}
+
+// OwnsValues reports whether this Ctx owns its values map. Intended for tests
+// and for callers that need to verify sharing has been released.
+func (c *Ctx) OwnsValues() bool {
+	return c.ownValues
 }
 
 // Status sets the HTTP status code and returns a builder for chaining.
