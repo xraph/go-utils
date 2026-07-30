@@ -193,8 +193,6 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 			field.Tag.Get("multipleOf") != "" ||
 			field.Tag.Get("enum") != ""
 
-		// Also check for required validation on parameter fields
-		isParamField := val.IsParameterField(field)
 		fieldRequired := val.IsFieldRequired(field)
 
 		// Skip if no validation needed: no custom tags AND (not required OR is optional)
@@ -205,9 +203,17 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 		fieldName := val.GetFieldName(field)
 
 		// Handle pointer fields
+		wasPointer := fieldValue.Kind() == reflect.Ptr
 		if fieldValue.Kind() == reflect.Ptr {
 			if fieldValue.IsNil() {
-				if fieldRequired && isParamField {
+				// Applies to body fields as well as parameters. Restricting
+				// this to parameters meant a required *T in a body was
+				// silently accepted when absent, while the generated OpenAPI
+				// still advertised it as required — the published contract
+				// and the runtime disagreed. A pointer is how a caller says
+				// "I need to tell absent from zero"; it is not a statement
+				// about whether the field may be omitted.
+				if fieldRequired {
 					errors.AddWithCode(fieldName, "field is required", val.ErrCodeRequired, nil)
 				}
 
@@ -217,16 +223,19 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 			fieldValue = fieldValue.Elem()
 		}
 
-		// Required validation for parameter string fields
-		if fieldRequired && isParamField && fieldValue.Kind() == reflect.String && fieldValue.String() == "" {
-			errors.AddWithCode(fieldName, "field is required", val.ErrCodeRequired, "")
-
-			continue
-		}
-
-		// Required validation for non-parameter (body) string fields
-		// go-playground/validator doesn't catch empty strings for required fields
-		if fieldRequired && !isParamField && fieldValue.Kind() == reflect.String && fieldValue.String() == "" {
+		// Value types only, and "" is a proxy for absence rather than a
+		// judgement about emptiness: once JSON is decoded into a non-pointer
+		// string, {"name":""} and {} are indistinguishable, so this is the
+		// only signal available at this layer.
+		//
+		// It must not extend to pointers. A non-nil pointer was demonstrably
+		// supplied — presence was already established above — so "" behind
+		// one is a real value. A field that must be present yet may
+		// legitimately be empty is therefore expressed as a pointer.
+		//
+		// The parameter and body cases were separate branches doing the same
+		// thing; they are one check now.
+		if fieldRequired && !wasPointer && fieldValue.Kind() == reflect.String && fieldValue.String() == "" {
 			errors.AddWithCode(fieldName, "field is required", val.ErrCodeRequired, "")
 
 			continue

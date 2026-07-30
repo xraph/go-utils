@@ -1269,3 +1269,41 @@ func TestBindRequest_JsonBodyEmptyStringBothRequired(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, valErrors.HasErrors())
 }
+
+// bindJSON binds body into dst and returns the resulting error, if any.
+func bindJSON(t *testing.T, body string, dst any) error {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := NewContext(httptest.NewRecorder(), req, nil).(*Ctx)
+
+	return ctx.BindRequest(dst)
+}
+
+// A pointer is how a caller expresses "must be supplied, but may be empty":
+// nil is absent, "" is supplied-and-empty. Previously a nil required pointer
+// was only reported for parameters, so a required *T in a body was silently
+// accepted when absent while the generated OpenAPI still advertised it as
+// required — the published contract and the runtime disagreed.
+type RequiredPointerRequest struct {
+	Name *string `json:"name" required:"true"`
+}
+
+func TestBindRequest_RequiredPointerRejectsAbsent(t *testing.T) {
+	var got RequiredPointerRequest
+
+	require.Error(t, bindJSON(t, `{}`, &got),
+		"an absent required pointer must fail")
+}
+
+// The presence of the pointer is what was checked; "" behind it is a real
+// value, not a missing one, so the emptiness proxy must not apply here.
+func TestBindRequest_RequiredPointerAcceptsEmpty(t *testing.T) {
+	var got RequiredPointerRequest
+
+	require.NoError(t, bindJSON(t, `{"name": ""}`, &got),
+		"a supplied-but-empty required pointer is valid")
+	require.NotNil(t, got.Name)
+	assert.Equal(t, "", *got.Name)
+}
