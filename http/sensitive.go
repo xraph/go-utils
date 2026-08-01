@@ -80,12 +80,12 @@ func CleanSensitiveFields(v any) any {
 func cleanSensitiveValue(rv reflect.Value) reflect.Value {
 	// Handle pointers and interfaces
 	switch rv.Kind() {
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
 			return rv
 		}
 
-		if rv.Kind() == reflect.Ptr {
+		if rv.Kind() == reflect.Pointer {
 			cleaned := cleanSensitiveValue(rv.Elem())
 			result := reflect.New(rv.Elem().Type())
 			result.Elem().Set(cleaned)
@@ -207,7 +207,7 @@ func applySensitiveCleaning(fieldType reflect.Type, config *SensitiveFieldConfig
 // For non-string types, it returns the zero value.
 func getStringValue(fieldType reflect.Type, value string) reflect.Value {
 	// Handle pointers
-	if fieldType.Kind() == reflect.Ptr {
+	if fieldType.Kind() == reflect.Pointer {
 		if fieldType.Elem().Kind() == reflect.String {
 			result := reflect.New(fieldType.Elem())
 			result.Elem().SetString(value)
@@ -254,7 +254,7 @@ func (p *ResponseProcessor) ProcessResponse(v any) any {
 	rv := reflect.ValueOf(v)
 
 	// Handle pointer
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return nil
 		}

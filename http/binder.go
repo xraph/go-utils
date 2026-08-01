@@ -39,7 +39,7 @@ import (
 func (c *Ctx) BindRequest(v any) error {
 	// Get reflection value
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return errors.New("BindRequest requires non-nil pointer")
 	}
 
@@ -104,7 +104,7 @@ func (c *Ctx) bindStructFields(rv reflect.Value, rt reflect.Type, errors *val.Va
 				embeddedValue := fieldValue
 
 				// Handle pointer to struct
-				if embeddedType.Kind() == reflect.Ptr {
+				if embeddedType.Kind() == reflect.Pointer {
 					embeddedType = embeddedType.Elem()
 					if embeddedValue.IsNil() {
 						embeddedValue.Set(reflect.New(embeddedType))
@@ -325,7 +325,7 @@ func isBindFieldRequired(field reflect.StructField, tag string) bool {
 	}
 
 	// 6. Pointer types are optional by default
-	if field.Type.Kind() == reflect.Ptr {
+	if field.Type.Kind() == reflect.Pointer {
 		return false
 	}
 
@@ -337,7 +337,7 @@ func isBindFieldRequired(field reflect.StructField, tag string) bool {
 // Supports types that implement encoding.TextUnmarshaler (e.g., xid.ID, uuid.UUID).
 func setFieldValue(fieldValue reflect.Value, value string, fieldName string, errors *val.ValidationError) error {
 	// Handle pointer types first - create the value if nil, then recurse
-	if fieldValue.Kind() == reflect.Ptr {
+	if fieldValue.Kind() == reflect.Pointer {
 		if fieldValue.IsNil() {
 			fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
 		}

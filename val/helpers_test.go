@@ -183,7 +183,7 @@ func TestIsNumericKind(t *testing.T) {
 
 	nonNumericKinds := []reflect.Kind{
 		reflect.String, reflect.Bool, reflect.Array, reflect.Slice,
-		reflect.Map, reflect.Struct, reflect.Ptr, reflect.Chan,
+		reflect.Map, reflect.Struct, reflect.Pointer, reflect.Chan,
 	}
 
 	for _, kind := range nonNumericKinds {
