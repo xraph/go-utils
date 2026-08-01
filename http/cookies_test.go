@@ -1,13 +1,14 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestCtx_SetCookie(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -51,7 +52,7 @@ func TestCtx_SetCookie(t *testing.T) {
 }
 
 func TestCtx_SetCookieWithOptions(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -95,7 +96,7 @@ func TestCtx_SetCookieWithOptions(t *testing.T) {
 }
 
 func TestCtx_Cookie(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 
 	// Add cookies to request
 	req.AddCookie(&http.Cookie{Name: "user_id", Value: "123"})
@@ -132,7 +133,7 @@ func TestCtx_Cookie(t *testing.T) {
 }
 
 func TestCtx_HasCookie(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "abc"})
 
 	w := httptest.NewRecorder()
@@ -150,7 +151,7 @@ func TestCtx_HasCookie(t *testing.T) {
 }
 
 func TestCtx_DeleteCookie(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -178,7 +179,7 @@ func TestCtx_DeleteCookie(t *testing.T) {
 }
 
 func TestCtx_GetAllCookies(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	req.AddCookie(&http.Cookie{Name: "cookie1", Value: "value1"})
 	req.AddCookie(&http.Cookie{Name: "cookie2", Value: "value2"})
 	req.AddCookie(&http.Cookie{Name: "cookie3", Value: "value3"})
@@ -211,7 +212,7 @@ func TestCtx_GetAllCookies(t *testing.T) {
 }
 
 func TestCtx_MultipleCookieOperations(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	req.AddCookie(&http.Cookie{Name: "existing", Value: "old_value"})
 
 	w := httptest.NewRecorder()

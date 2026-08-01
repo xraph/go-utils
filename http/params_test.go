@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,7 +47,7 @@ func TestCtx_ParamInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 			w := httptest.NewRecorder()
 			ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -94,7 +95,7 @@ func TestCtx_ParamInt64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 			w := httptest.NewRecorder()
 			ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -149,7 +150,7 @@ func TestCtx_ParamFloat64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 			w := httptest.NewRecorder()
 			ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -218,7 +219,7 @@ func TestCtx_ParamBool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 			w := httptest.NewRecorder()
 			ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -241,7 +242,7 @@ func TestCtx_ParamBool(t *testing.T) {
 }
 
 func TestCtx_ParamIntDefault(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -266,7 +267,7 @@ func TestCtx_ParamIntDefault(t *testing.T) {
 }
 
 func TestCtx_ParamInt64Default(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -284,7 +285,7 @@ func TestCtx_ParamInt64Default(t *testing.T) {
 }
 
 func TestCtx_ParamFloat64Default(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	ctx := NewContext(w, req, nil).(*Ctx)
 
@@ -302,7 +303,7 @@ func TestCtx_ParamFloat64Default(t *testing.T) {
 }
 
 func TestCtx_ParamBoolDefault(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 	ctx := NewContext(w, req, nil).(*Ctx)
 

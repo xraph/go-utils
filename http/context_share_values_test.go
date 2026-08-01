@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,7 +10,7 @@ import (
 func newTestCtx() Context {
 	return NewContext(
 		httptest.NewRecorder(),
-		httptest.NewRequest(http.MethodGet, "/", nil),
+		httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil),
 		nil,
 	)
 }
