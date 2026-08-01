@@ -51,7 +51,7 @@ func ServiceName(v any) string {
 	}
 
 	t := reflect.TypeOf(v)
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 

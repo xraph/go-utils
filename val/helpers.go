@@ -50,7 +50,7 @@ func IsFieldRequired(field reflect.StructField) bool {
 	}
 
 	// 5. Pointer types are optional by default
-	if field.Type.Kind() == reflect.Ptr {
+	if field.Type.Kind() == reflect.Pointer {
 		return false
 	}
 
@@ -116,7 +116,7 @@ func IsZeroValue(v reflect.Value) bool {
 		return v.Float() == 0
 	case reflect.Bool:
 		return !v.Bool()
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		return v.IsNil()
 	case reflect.Slice, reflect.Map, reflect.Array:
 		return v.Len() == 0

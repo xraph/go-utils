@@ -46,7 +46,7 @@ type CreateUserResponse struct {
 }
 
 func TestContext_RequestResponse(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -56,7 +56,7 @@ func TestContext_RequestResponse(t *testing.T) {
 }
 
 func TestContext_Params(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/users/123", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -69,7 +69,7 @@ func TestContext_Params(t *testing.T) {
 }
 
 func TestContext_Query(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test?name=john&age=30", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=john&age=30", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -80,7 +80,7 @@ func TestContext_Query(t *testing.T) {
 }
 
 func TestContext_QueryDefault(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test?name=john", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=john", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -96,7 +96,7 @@ func TestContext_BindJSON(t *testing.T) {
 	}
 
 	body := `{"name":"John","email":"john@example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte(body)))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -113,7 +113,7 @@ func TestContext_BindJSON(t *testing.T) {
 }
 
 func TestContext_BindJSON_InvalidJSON(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte("invalid json")))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", bytes.NewReader([]byte("invalid json")))
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -127,7 +127,7 @@ func TestContext_BindJSON_InvalidJSON(t *testing.T) {
 }
 
 func TestContext_BindJSON_NilBody(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -146,7 +146,7 @@ func TestContext_BindXML(t *testing.T) {
 	}
 
 	body := `<request><name>John</name><email>john@example.com</email></request>`
-	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte(body)))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/xml")
 
 	rec := httptest.NewRecorder()
@@ -168,7 +168,7 @@ func TestContext_Bind_AutoDetectJSON(t *testing.T) {
 	}
 
 	body := `{"name":"John"}`
-	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte(body)))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -189,7 +189,7 @@ func TestContext_Bind_AutoDetectXML(t *testing.T) {
 	}
 
 	body := `<request><name>John</name></request>`
-	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte(body)))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/xml")
 
 	rec := httptest.NewRecorder()
@@ -204,7 +204,7 @@ func TestContext_Bind_AutoDetectXML(t *testing.T) {
 }
 
 func TestContext_Bind_UnsupportedContentType(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte("data")))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", bytes.NewReader([]byte("data")))
 	req.Header.Set("Content-Type", "text/plain")
 
 	rec := httptest.NewRecorder()
@@ -219,7 +219,7 @@ func TestContext_Bind_UnsupportedContentType(t *testing.T) {
 }
 
 func TestContext_JSON(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -244,7 +244,7 @@ func TestContext_XML(t *testing.T) {
 		Message string   `xml:"message"`
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -258,7 +258,7 @@ func TestContext_XML(t *testing.T) {
 }
 
 func TestContext_String(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -272,7 +272,7 @@ func TestContext_String(t *testing.T) {
 }
 
 func TestContext_Bytes(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -286,7 +286,7 @@ func TestContext_Bytes(t *testing.T) {
 }
 
 func TestContext_NoContent(t *testing.T) {
-	req := httptest.NewRequest(http.MethodDelete, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -299,7 +299,7 @@ func TestContext_NoContent(t *testing.T) {
 }
 
 func TestContext_Redirect(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/old", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/old", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -312,7 +312,7 @@ func TestContext_Redirect(t *testing.T) {
 }
 
 func TestContext_Redirect_InvalidCode(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/old", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/old", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -322,7 +322,7 @@ func TestContext_Redirect_InvalidCode(t *testing.T) {
 }
 
 func TestContext_Header(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	req.Header.Set("X-Custom", "value")
 
 	rec := httptest.NewRecorder()
@@ -334,7 +334,7 @@ func TestContext_Header(t *testing.T) {
 }
 
 func TestContext_SetHeader(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -344,7 +344,7 @@ func TestContext_SetHeader(t *testing.T) {
 }
 
 func TestContext_SetGet(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -355,7 +355,7 @@ func TestContext_SetGet(t *testing.T) {
 }
 
 func TestContext_MustGet(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -365,7 +365,7 @@ func TestContext_MustGet(t *testing.T) {
 }
 
 func TestContext_MustGet_Panic(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -376,7 +376,7 @@ func TestContext_MustGet_Panic(t *testing.T) {
 }
 
 func TestContext_Context(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -386,7 +386,7 @@ func TestContext_Context(t *testing.T) {
 }
 
 func TestContext_WithContext(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -401,7 +401,7 @@ func TestContext_WithContext(t *testing.T) {
 
 // func TestContext_Container(t *testing.T) {
 // 	container := di.NewContainer()
-// 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+// 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 // 	rec := httptest.NewRecorder()
 
 // 	ctx := NewContext(rec, req, container)
@@ -411,7 +411,7 @@ func TestContext_WithContext(t *testing.T) {
 
 // func TestContext_Scope(t *testing.T) {
 // 	container := di.NewContainer()
-// 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+// 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 // 	rec := httptest.NewRecorder()
 
 // 	ctx := NewContext(rec, req, container)
@@ -428,7 +428,7 @@ func TestContext_WithContext(t *testing.T) {
 // 	})
 // 	require.NoError(t, err)
 
-// 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+// 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 // 	rec := httptest.NewRecorder()
 
 // 	ctx := NewContext(rec, req, container)
@@ -439,7 +439,7 @@ func TestContext_WithContext(t *testing.T) {
 // }
 
 func TestContext_Resolve_NoContainer(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -456,7 +456,7 @@ func TestContext_Resolve_NoContainer(t *testing.T) {
 // 	})
 // 	require.NoError(t, err)
 
-// 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+// 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 // 	rec := httptest.NewRecorder()
 
 // 	ctx := NewContext(rec, req, container)
@@ -467,7 +467,7 @@ func TestContext_Resolve_NoContainer(t *testing.T) {
 
 // func TestContext_Must_Panic(t *testing.T) {
 // 	container := di.NewContainer()
-// 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+// 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 // 	rec := httptest.NewRecorder()
 
 // 	ctx := NewContext(rec, req, container)
@@ -479,7 +479,7 @@ func TestContext_Resolve_NoContainer(t *testing.T) {
 
 // func TestContext_Cleanup(t *testing.T) {
 // 	container := di.NewContainer()
-// 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+// 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 // 	rec := httptest.NewRecorder()
 
 // 	ctx := NewContext(rec, req, container).(*Ctx)
@@ -505,7 +505,7 @@ func TestContext_FormFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create request
-	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -534,7 +534,7 @@ func TestContext_FormFile_NotFound(t *testing.T) {
 	err := writer.Close()
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -566,7 +566,7 @@ func TestContext_FormFiles_Multiple(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create request
-	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -587,7 +587,7 @@ func TestContext_FormFiles_NotFound(t *testing.T) {
 	err := writer.Close()
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -613,7 +613,7 @@ func TestContext_FormValue(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create request
-	req := httptest.NewRequest(http.MethodPost, "/submit", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/submit", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -645,7 +645,7 @@ func TestContext_FormValues(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create request
-	req := httptest.NewRequest(http.MethodPost, "/submit", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/submit", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -676,7 +676,7 @@ func TestContext_ParseMultipartForm(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create request
-	req := httptest.NewRequest(http.MethodPost, "/submit", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/submit", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -696,7 +696,7 @@ func TestContext_ParseMultipartForm_InvalidForm(t *testing.T) {
 	// Create invalid multipart form
 	body := bytes.NewBufferString("not a multipart form")
 
-	req := httptest.NewRequest(http.MethodPost, "/submit", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/submit", body)
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=----invalid")
 
 	rec := httptest.NewRecorder()
@@ -714,7 +714,7 @@ func TestContext_Bind_MultipartForm(t *testing.T) {
 	err := writer.Close()
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -733,7 +733,7 @@ func TestContext_Bind_URLEncoded(t *testing.T) {
 	// Create URL-encoded form
 	body := bytes.NewBufferString("name=John&email=john@example.com")
 
-	req := httptest.NewRequest(http.MethodPost, "/submit", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/submit", body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	rec := httptest.NewRecorder()
@@ -764,7 +764,7 @@ func TestContext_Cleanup_MultipartForm(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create request
-	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	rec := httptest.NewRecorder()
@@ -786,7 +786,7 @@ func TestContext_Cleanup_MultipartForm(t *testing.T) {
 }
 
 func TestContext_StatusBuilder_JSON(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -810,7 +810,7 @@ func TestContext_StatusBuilder_JSON(t *testing.T) {
 }
 
 func TestContext_StatusBuilder_XML(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -838,7 +838,7 @@ func TestContext_StatusBuilder_XML(t *testing.T) {
 }
 
 func TestContext_StatusBuilder_String(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -852,7 +852,7 @@ func TestContext_StatusBuilder_String(t *testing.T) {
 }
 
 func TestContext_StatusBuilder_Bytes(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -866,7 +866,7 @@ func TestContext_StatusBuilder_Bytes(t *testing.T) {
 }
 
 func TestContext_StatusBuilder_NoContent(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -879,7 +879,7 @@ func TestContext_StatusBuilder_NoContent(t *testing.T) {
 }
 
 func TestContext_StatusBuilder_WithHeaders(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -916,7 +916,7 @@ func (f *flushableRecorder) Flush() {
 }
 
 func TestContext_WriteSSE_String(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/events", nil)
 	rec := newFlushableRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -934,7 +934,7 @@ func TestContext_WriteSSE_String(t *testing.T) {
 }
 
 func TestContext_WriteSSE_JSON(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/events", nil)
 	rec := newFlushableRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -960,7 +960,7 @@ func TestContext_WriteSSE_JSON(t *testing.T) {
 }
 
 func TestContext_WriteSSE_NoEvent(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/events", nil)
 	rec := newFlushableRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -975,7 +975,7 @@ func TestContext_WriteSSE_NoEvent(t *testing.T) {
 }
 
 func TestContext_WriteSSE_Bytes(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/events", nil)
 	rec := newFlushableRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -991,7 +991,7 @@ func TestContext_WriteSSE_Bytes(t *testing.T) {
 }
 
 func TestContext_WriteSSE_InvalidJSON(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/events", nil)
 	rec := newFlushableRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -1005,7 +1005,7 @@ func TestContext_WriteSSE_InvalidJSON(t *testing.T) {
 }
 
 func TestContext_Flush_Success(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/events", nil)
 	rec := newFlushableRecorder()
 
 	ctx := NewContext(rec, req, nil)
@@ -1043,7 +1043,7 @@ func (w *nonFlushableWriter) WriteHeader(statusCode int) {
 }
 
 func TestContext_Flush_NotSupported(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/events", nil)
 	// Use a writer that doesn't implement Flusher
 	rec := newNonFlushableWriter()
 

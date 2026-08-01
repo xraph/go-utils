@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -88,7 +89,7 @@ type PrecedenceRequest struct {
 }
 
 func TestBindRequest_BasicBinding(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/users/123?name=john", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/users/123?name=john", nil)
 	req.Header.Set("X-Api-Key", "secret-key")
 
 	rec := httptest.NewRecorder()
@@ -108,7 +109,7 @@ func TestBindRequest_BasicBinding(t *testing.T) {
 
 func TestBindRequest_OptionalTag_NotRequired(t *testing.T) {
 	// Test that optional fields don't cause validation errors when missing
-	req := httptest.NewRequest(http.MethodGet, "/test?required=value", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?required=value", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -127,7 +128,7 @@ func TestBindRequest_OptionalTag_NotRequired(t *testing.T) {
 
 func TestBindRequest_OptionalTag_ValidationSkipped(t *testing.T) {
 	// Test that validation is skipped for empty optional fields
-	req := httptest.NewRequest(http.MethodGet, "/test?email=test@example.com", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?email=test@example.com", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -146,7 +147,7 @@ func TestBindRequest_OptionalTag_ValidationSkipped(t *testing.T) {
 
 func TestBindRequest_OptionalTag_ValidationAppliedWhenProvided(t *testing.T) {
 	// Test that validation is applied when optional field has a value
-	req := httptest.NewRequest(http.MethodGet, "/test?email=test@example.com&optionalEmail=invalid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?email=test@example.com&optionalEmail=invalid", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -166,7 +167,7 @@ func TestBindRequest_OptionalTag_ValidationAppliedWhenProvided(t *testing.T) {
 
 func TestBindRequest_OptionalTag_ValidOptionalValue(t *testing.T) {
 	// Test that valid optional values pass validation
-	req := httptest.NewRequest(http.MethodGet, "/test?email=test@example.com&optionalEmail=other@example.com&optionalName=John&optionalAge=25", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?email=test@example.com&optionalEmail=other@example.com&optionalName=John&optionalAge=25", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -184,7 +185,7 @@ func TestBindRequest_OptionalTag_ValidOptionalValue(t *testing.T) {
 
 func TestBindRequest_RequiredFieldMissing(t *testing.T) {
 	// Test that required fields cause validation errors when missing
-	req := httptest.NewRequest(http.MethodGet, "/test?optional=value", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?optional=value", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -203,7 +204,7 @@ func TestBindRequest_RequiredFieldMissing(t *testing.T) {
 
 func TestBindRequest_HeaderOptionalTag(t *testing.T) {
 	// Test that optional headers don't cause validation errors when missing
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer token")
 	// Not setting X-Trace-ID or X-Request-ID
 	rec := httptest.NewRecorder()
@@ -222,7 +223,7 @@ func TestBindRequest_HeaderOptionalTag(t *testing.T) {
 
 func TestBindRequest_HeaderRequiredMissing(t *testing.T) {
 	// Test that required headers cause validation errors when missing
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	// Not setting Authorization header
 	rec := httptest.NewRecorder()
 
@@ -242,7 +243,7 @@ func TestBindRequest_HeaderRequiredMissing(t *testing.T) {
 
 func TestBindRequest_EnumOptional(t *testing.T) {
 	// Test that optional enum fields don't fail when empty
-	req := httptest.NewRequest(http.MethodGet, "/test?status=active", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?status=active", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -258,7 +259,7 @@ func TestBindRequest_EnumOptional(t *testing.T) {
 
 func TestBindRequest_EnumOptional_InvalidWhenProvided(t *testing.T) {
 	// Test that invalid optional enum values still fail validation
-	req := httptest.NewRequest(http.MethodGet, "/test?status=active&optionalStatus=invalid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?status=active&optionalStatus=invalid", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -277,7 +278,7 @@ func TestBindRequest_EnumOptional_InvalidWhenProvided(t *testing.T) {
 
 func TestBindRequest_NumericOptional(t *testing.T) {
 	// Test that optional numeric fields don't fail minimum validation when zero
-	req := httptest.NewRequest(http.MethodGet, "/test?page=1&limit=50", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?page=1&limit=50", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -295,7 +296,7 @@ func TestBindRequest_NumericOptional(t *testing.T) {
 
 func TestBindRequest_NumericOptional_ValidatesWhenProvided(t *testing.T) {
 	// Test that optional numeric fields validate when provided with invalid value
-	req := httptest.NewRequest(http.MethodGet, "/test?page=1&limit=50&optionalPage=0", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?page=1&limit=50&optionalPage=0", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -311,7 +312,7 @@ func TestBindRequest_NumericOptional_ValidatesWhenProvided(t *testing.T) {
 
 func TestBindRequest_Precedence_OptionalOverRequired(t *testing.T) {
 	// Test that optional:"true" takes precedence over required:"true"
-	req := httptest.NewRequest(http.MethodGet, "/test?field2=value", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?field2=value", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -331,7 +332,7 @@ func TestBindRequest_Precedence_OptionalOverRequired(t *testing.T) {
 
 func TestBindRequest_Precedence_RequiredFailsWhenMissing(t *testing.T) {
 	// Test that required:"true" field fails when missing
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -350,7 +351,7 @@ func TestBindRequest_Precedence_RequiredFailsWhenMissing(t *testing.T) {
 
 func TestBindRequest_BodyWithOptional(t *testing.T) {
 	body := `{"name": "John"}`
-	req := httptest.NewRequest(http.MethodPost, "/users/123", bytes.NewReader([]byte(body)))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/users/123", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -370,7 +371,7 @@ func TestBindRequest_BodyWithOptional(t *testing.T) {
 
 func TestBindRequest_DefaultValues(t *testing.T) {
 	// Test that default values are applied for optional fields
-	req := httptest.NewRequest(http.MethodGet, "/test?required=value", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?required=value", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -385,7 +386,7 @@ func TestBindRequest_DefaultValues(t *testing.T) {
 }
 
 func TestBindRequest_NilPointer(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -395,7 +396,7 @@ func TestBindRequest_NilPointer(t *testing.T) {
 }
 
 func TestBindRequest_NonPointer(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -538,7 +539,7 @@ type BaseParams struct {
 
 func TestBindRequest_EmbeddedOptional(t *testing.T) {
 	// Test that embedded struct fields are properly bound with optional tags
-	req := httptest.NewRequest(http.MethodGet, "/test?name=John&limit=20", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=John&limit=20", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -558,7 +559,7 @@ func TestBindRequest_EmbeddedOptional(t *testing.T) {
 
 func TestBindRequest_EmbeddedOptional_WithDefaults(t *testing.T) {
 	// Test that defaults are applied to embedded struct fields
-	req := httptest.NewRequest(http.MethodGet, "/test?name=Jane", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=Jane", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -577,7 +578,7 @@ func TestBindRequest_EmbeddedOptional_WithDefaults(t *testing.T) {
 
 func TestBindRequest_EmbeddedOptional_NoRequired(t *testing.T) {
 	// Test that embedded optional fields don't cause errors when not provided
-	req := httptest.NewRequest(http.MethodGet, "/test?name=Test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=Test", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -600,7 +601,7 @@ type DefaultTagOnlyRequest struct {
 
 func TestBindRequest_DefaultTagImplicitlyOptional(t *testing.T) {
 	// Only provide name, omit page and limit — defaults should be applied
-	req := httptest.NewRequest(http.MethodGet, "/test?name=John", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=John", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -617,7 +618,7 @@ func TestBindRequest_DefaultTagImplicitlyOptional(t *testing.T) {
 
 func TestBindRequest_DefaultTagWithExplicitValues(t *testing.T) {
 	// Provide explicit values — should override defaults
-	req := httptest.NewRequest(http.MethodGet, "/test?name=John&page=5&limit=50", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=John&page=5&limit=50", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -649,7 +650,7 @@ func TestBindRequest_TextUnmarshaler_XID(t *testing.T) {
 	validID := xid.New()
 	validIDStr := validID.String()
 
-	req := httptest.NewRequest(http.MethodGet, "/workspaces/"+validIDStr+"?userId="+validIDStr, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/workspaces/"+validIDStr+"?userId="+validIDStr, nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -666,7 +667,7 @@ func TestBindRequest_TextUnmarshaler_XID(t *testing.T) {
 
 func TestBindRequest_TextUnmarshaler_InvalidXID(t *testing.T) {
 	// Test with invalid XID string
-	req := httptest.NewRequest(http.MethodGet, "/workspaces/invalid-xid?userId=also-invalid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/workspaces/invalid-xid?userId=also-invalid", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -690,7 +691,7 @@ func TestBindRequest_TextUnmarshaler_OptionalXID(t *testing.T) {
 	validID := xid.New()
 	validIDStr := validID.String()
 
-	req := httptest.NewRequest(http.MethodGet, "/workspaces/"+validIDStr, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/workspaces/"+validIDStr, nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -710,7 +711,7 @@ func TestBindRequest_TextUnmarshaler_OptionalXIDProvided(t *testing.T) {
 	workspaceID := xid.New()
 	traceID := xid.New()
 
-	req := httptest.NewRequest(http.MethodGet, "/workspaces/"+workspaceID.String()+"?traceId="+traceID.String(), nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/workspaces/"+workspaceID.String()+"?traceId="+traceID.String(), nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -740,7 +741,7 @@ type CustomIDRequest struct {
 }
 
 func TestBindRequest_TextUnmarshaler_CustomType(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/items/123", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/items/123", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -763,7 +764,7 @@ type BooleanBindRequest struct {
 
 func TestBindRequest_BooleanFalseRequired(t *testing.T) {
 	// Test that required boolean fields with explicit false value don't fail validation
-	req := httptest.NewRequest(http.MethodGet, "/test?includeTemplate=false&dryRun=true", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?includeTemplate=false&dryRun=true", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -780,7 +781,7 @@ func TestBindRequest_BooleanFalseRequired(t *testing.T) {
 
 func TestBindRequest_BooleanTrueRequired(t *testing.T) {
 	// Test that required boolean fields with explicit true value pass validation
-	req := httptest.NewRequest(http.MethodGet, "/test?includeTemplate=true&dryRun=false", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?includeTemplate=true&dryRun=false", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -796,7 +797,7 @@ func TestBindRequest_BooleanTrueRequired(t *testing.T) {
 
 func TestBindRequest_BooleanMissingRequired(t *testing.T) {
 	// Test that required boolean fields fail validation when not provided
-	req := httptest.NewRequest(http.MethodGet, "/test?dryRun=true", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?dryRun=true", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -816,7 +817,7 @@ func TestBindRequest_BooleanMissingRequired(t *testing.T) {
 
 func TestBindRequest_BooleanOptional(t *testing.T) {
 	// Test that optional boolean fields don't fail validation when not provided
-	req := httptest.NewRequest(http.MethodGet, "/test?includeTemplate=true&dryRun=false", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?includeTemplate=true&dryRun=false", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -841,7 +842,7 @@ type NumericZeroBindRequest struct {
 
 func TestBindRequest_NumericZeroRequired(t *testing.T) {
 	// Test that required numeric fields with explicit 0 value don't fail validation
-	req := httptest.NewRequest(http.MethodGet, "/test?count=0&limit=0&price=0.0&offset=5", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?count=0&limit=0&price=0.0&offset=5", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -859,7 +860,7 @@ func TestBindRequest_NumericZeroRequired(t *testing.T) {
 
 func TestBindRequest_NumericPositiveRequired(t *testing.T) {
 	// Test that required numeric fields with positive values pass validation
-	req := httptest.NewRequest(http.MethodGet, "/test?count=10&limit=20&price=99.99&offset=0", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?count=10&limit=20&price=99.99&offset=0", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -877,7 +878,7 @@ func TestBindRequest_NumericPositiveRequired(t *testing.T) {
 
 func TestBindRequest_NumericMissingRequired(t *testing.T) {
 	// Test that required numeric fields fail validation when not provided
-	req := httptest.NewRequest(http.MethodGet, "/test?offset=5", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?offset=5", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -905,7 +906,7 @@ type StringEmptyBindRequest struct {
 func TestBindRequest_StringEmptyRequired(t *testing.T) {
 	// Test that required string fields with explicit empty value fail validation
 	// (empty string is legitimately ambiguous and should fail)
-	req := httptest.NewRequest(http.MethodGet, "/test?name=&description=test&tag=", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test?name=&description=test&tag=", nil)
 	rec := httptest.NewRecorder()
 
 	ctx := NewContext(rec, req, nil).(*Ctx)
@@ -933,7 +934,7 @@ type JsonBodyBooleanRequest struct {
 func TestBindRequest_JsonBodyBooleanFalse(t *testing.T) {
 	// Test that JSON body fields with explicit false value don't fail validation
 	body := bytes.NewBufferString(`{"isPrivate": false, "isActive": false}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -954,7 +955,7 @@ func TestBindRequest_JsonBodyBooleanTrue(t *testing.T) {
 	// Test that JSON body fields with explicit true value pass validation
 	falseVal := false
 	body := bytes.NewBufferString(`{"isPrivate": true, "isActive": true, "isEnabled": false}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -977,7 +978,7 @@ func TestBindRequest_JsonBodyBooleanRequired(t *testing.T) {
 	// Note: After unmarshaling, we cannot distinguish between missing field and explicit false
 	// Therefore, required validation for non-pointer boolean fields is not meaningful
 	body := bytes.NewBufferString(`{"isPrivate": true}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -997,7 +998,7 @@ func TestBindRequest_JsonBodyBooleanOptional(t *testing.T) {
 	// Test that optional boolean fields (pointers) work correctly
 	trueVal := true
 	body := bytes.NewBufferString(`{"isPrivate": false, "isActive": true, "isEnabled": true}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1026,7 +1027,7 @@ type JsonBodyNumericRequest struct {
 func TestBindRequest_JsonBodyNumericZero(t *testing.T) {
 	// Test that JSON body fields with explicit 0 value don't fail validation
 	body := bytes.NewBufferString(`{"count": 0, "offset": 0, "price": 0.0}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1048,7 +1049,7 @@ func TestBindRequest_JsonBodyNumericPositive(t *testing.T) {
 	// Test that JSON body fields with positive values pass validation
 	limitVal := 100
 	body := bytes.NewBufferString(`{"count": 10, "offset": 5, "price": 99.99, "limit": 100}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1072,7 +1073,7 @@ func TestBindRequest_JsonBodyNumericRequired(t *testing.T) {
 	// Note: After unmarshaling, we cannot distinguish between missing field and explicit 0
 	// Therefore, required validation for non-pointer numeric fields is not meaningful
 	body := bytes.NewBufferString(`{"count": 5, "price": 10.5}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1093,7 +1094,7 @@ func TestBindRequest_JsonBodyNumericOptional(t *testing.T) {
 	// Test that optional numeric fields (pointers) work correctly
 	limitVal := 50
 	body := bytes.NewBufferString(`{"count": 0, "offset": 0, "price": 0, "limit": 50}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1123,7 +1124,7 @@ type JsonBodyMixedRequest struct {
 func TestBindRequest_JsonBodyMixedZeroValues(t *testing.T) {
 	// Test that mixed JSON body with various zero values works correctly
 	body := bytes.NewBufferString(`{"name": "test", "isPrivate": false, "count": 0, "price": 0.0}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1186,7 +1187,7 @@ func TestBindRequest_AllPrimitiveTypesZeroValues(t *testing.T) {
 		"boolField": false,
 		"stringField": "valid"
 	}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1227,7 +1228,7 @@ type RequiredStringRequest struct {
 func TestBindRequest_JsonBodyEmptyStringRequired(t *testing.T) {
 	// Test that required string fields with empty values fail validation
 	body := bytes.NewBufferString(`{"name": "", "email": "test@example.com"}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1250,7 +1251,7 @@ func TestBindRequest_JsonBodyEmptyStringRequired(t *testing.T) {
 func TestBindRequest_JsonBodyEmptyStringBothRequired(t *testing.T) {
 	// Test that multiple required string fields with empty values fail validation
 	body := bytes.NewBufferString(`{"name": "", "email": ""}`)
-	req := httptest.NewRequest(http.MethodPost, "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -1274,7 +1275,7 @@ func TestBindRequest_JsonBodyEmptyStringBothRequired(t *testing.T) {
 func bindJSON(t *testing.T, body string, dst any) error {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewBufferString(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := NewContext(httptest.NewRecorder(), req, nil).(*Ctx)
 

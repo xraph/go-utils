@@ -55,7 +55,7 @@ func (c *Ctx) validateStruct(v any, rt reflect.Type, errs *val.ValidationError) 
 
 	// Then validate using our custom tags (format, minLength, pattern, etc.)
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 	}
 
@@ -166,7 +166,7 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 				embeddedType := field.Type
 				embeddedValue := fieldValue
 
-				if embeddedType.Kind() == reflect.Ptr {
+				if embeddedType.Kind() == reflect.Pointer {
 					if embeddedValue.IsNil() {
 						continue
 					}
@@ -203,8 +203,8 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 		fieldName := val.GetFieldName(field)
 
 		// Handle pointer fields
-		wasPointer := fieldValue.Kind() == reflect.Ptr
-		if fieldValue.Kind() == reflect.Ptr {
+		wasPointer := fieldValue.Kind() == reflect.Pointer
+		if fieldValue.Kind() == reflect.Pointer {
 			if fieldValue.IsNil() {
 				// Applies to body fields as well as parameters. Restricting
 				// this to parameters meant a required *T in a body was
