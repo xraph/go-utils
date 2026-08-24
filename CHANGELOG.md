@@ -1,3 +1,9 @@
+## [1.1.7](https://github.com/xraph/go-utils/compare/v1.1.6...v1.1.7) (2026-08-24)
+
+### Bug Fixes
+
+* **http:** bind form-encoded request bodies through form tags ([ddae0d4](https://github.com/xraph/go-utils/commit/ddae0d45b05c8e738aba123ca816482fe41159b0))
+
 ## [1.1.6](https://github.com/xraph/go-utils/compare/v1.1.5...v1.1.6) (2026-08-01)
 
 ### Bug Fixes
