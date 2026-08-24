@@ -234,25 +234,48 @@ func (c *Ctx) QueryDefault(name, defaultValue string) string {
 }
 
 // Bind binds request body to a value (auto-detects JSON/XML/multipart).
+//
+// Form-encoded bodies have no decoder that fills arbitrary struct fields, so
+// Bind reports an error for them; bind those through BindRequest with
+// `form:"..."` tags. Passing a nil v parses the form and returns, which is the
+// way to prepare a request for FormValue.
 func (c *Ctx) Bind(v any) error {
 	contentType := c.request.Header.Get("Content-Type")
 
-	switch {
-	case contentType == "application/json" || contentType == "":
+	// Match on the media type alone. Clients routinely send a charset
+	// parameter, and comparing the raw header sent `application/json;
+	// charset=utf-8` to the unsupported-type branch. Comparing the stripped
+	// type also stops a prefix match from accepting a near miss like
+	// application/x-www-form-urlencoded-not-really.
+	switch mediaType(contentType) {
+	case "application/json", "":
 		return c.BindJSON(v)
-	case contentType == "application/xml" || contentType == "text/xml":
+	case "application/xml", "text/xml":
 		return c.BindXML(v)
-	case strings.HasPrefix(contentType, "multipart/form-data"):
+	case "multipart/form-data":
 		// For multipart forms, we don't auto-bind to structs
 		// Users should use FormFile() and FormValue() methods directly
 		return errors.New("multipart/form-data should be handled using FormFile() and FormValue() methods")
-	case strings.HasPrefix(contentType, "application/x-www-form-urlencoded"):
-		// Parse form values
+	case "application/x-www-form-urlencoded":
+		// Parse the form so FormValue and friends still work, then say plainly
+		// that v cannot be filled from it. There is no decoder that pours a
+		// form body into arbitrary struct fields the way json.Decode does;
+		// binding one needs `form:"..."` tags read through BindRequest.
+		// Returning nil here handed the caller an untouched v and no error,
+		// which reads as a successful bind everywhere it is checked.
 		if err := c.request.ParseForm(); err != nil {
 			return fmt.Errorf("failed to parse form: %w", err)
 		}
 
-		return nil
+		// Bind(nil) is the documented way to trigger ParseForm before reading
+		// values with FormValue, and has no target to leave unpopulated.
+		if v == nil {
+			return nil
+		}
+
+		return fmt.Errorf(
+			"cannot bind %s body: tag fields with `form:\"...\"` and use BindRequest, or read values with FormValue()",
+			mediaType(contentType))
 	default:
 		return fmt.Errorf("unsupported content type: %s", contentType)
 	}

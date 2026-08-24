@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	gohttp "net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -96,7 +97,8 @@ func (c *Ctx) bindStructFields(rv reflect.Value, rt reflect.Type, errors *val.Va
 			// Check if the embedded field has explicit tags (would mean it's not truly flattened)
 			hasExplicitTag := field.Tag.Get("path") != "" ||
 				field.Tag.Get("query") != "" ||
-				field.Tag.Get("header") != ""
+				field.Tag.Get("header") != "" ||
+				field.Tag.Get("form") != ""
 
 			if !hasExplicitTag {
 				// Get the embedded struct type
@@ -148,7 +150,15 @@ func (c *Ctx) bindField(field reflect.StructField, fieldValue reflect.Value, err
 		return c.bindHeaderParam(field, fieldValue, headerTag, errors)
 	}
 
-	// Form and body fields are handled separately in bindBodyFields
+	// Form fields only bind when the request actually carries a form-encoded
+	// body. A struct may tag a field both `json:"x" form:"x"` so one endpoint
+	// accepts either encoding; when the body is JSON this branch must stand
+	// aside and let bindBodyFields decode it.
+	if formTag := field.Tag.Get("form"); formTag != "" && formTag != "-" && c.hasFormBody() {
+		return c.bindFormParam(field, fieldValue, formTag, errors)
+	}
+
+	// Body fields are handled separately in bindBodyFields
 	return nil
 }
 
@@ -245,6 +255,158 @@ func (c *Ctx) bindHeaderParam(field reflect.StructField, fieldValue reflect.Valu
 	return nil
 }
 
+// maxFormMemory bounds the in-memory portion of a parsed multipart form.
+const maxFormMemory = 32 << 20
+
+// hasFormBody reports whether the request carries a form-encoded body that
+// form:"..." tagged fields can be read from.
+func (c *Ctx) hasFormBody() bool {
+	switch mediaType(c.request.Header.Get("Content-Type")) {
+	case "application/x-www-form-urlencoded", "multipart/form-data":
+		return true
+	default:
+		return false
+	}
+}
+
+// formValues parses the request form and returns the values that form:"..."
+// tagged fields bind from.
+//
+// On methods that carry a body the values come from PostForm, the body alone.
+// Form would additionally merge in the URL query, which would let
+// POST /token?client_secret=... supply a credential the body never sent.
+// RFC 6749 §4.1.3 requires token parameters in the body, so the merge is both
+// a spec violation and a parameter-pollution surface. Bodyless methods fall
+// back to the merged set so form: still resolves there.
+//
+// ParseForm and ParseMultipartForm are both idempotent, so calling this once
+// per field is cheap.
+func (c *Ctx) formValues() (url.Values, error) {
+	if mediaType(c.request.Header.Get("Content-Type")) == "multipart/form-data" {
+		if c.request.MultipartForm == nil {
+			if err := c.request.ParseMultipartForm(maxFormMemory); err != nil {
+				return nil, fmt.Errorf("failed to parse multipart form: %w", err)
+			}
+		}
+	} else if err := c.request.ParseForm(); err != nil {
+		return nil, fmt.Errorf("failed to parse form: %w", err)
+	}
+
+	switch c.request.Method {
+	case gohttp.MethodPost, gohttp.MethodPut, gohttp.MethodPatch:
+		return c.request.PostForm, nil
+	default:
+		return c.request.Form, nil
+	}
+}
+
+// bindFormParam binds a field from an application/x-www-form-urlencoded or
+// multipart/form-data body.
+func (c *Ctx) bindFormParam(field reflect.StructField, fieldValue reflect.Value, tag string, errors *val.ValidationError) error {
+	fieldName := parseTagName(tag)
+	if fieldName == "" {
+		fieldName = field.Name
+	}
+
+	values, err := c.formValues()
+	if err != nil {
+		return err
+	}
+
+	// Determine if field is required using consistent precedence:
+	// 1. optional:"true" - explicitly optional (highest priority)
+	// 2. required:"true" - explicitly required
+	// 3. omitempty in tag - optional
+	// 4. pointer type - optional
+	// 5. default: non-pointer types are required
+	required := isBindFieldRequired(field, tag)
+
+	// Repeated parameters (scope=openid&scope=profile) fill a slice field.
+	if isMultiValueTarget(fieldValue) {
+		present := values[fieldName]
+		if len(present) == 0 {
+			if required {
+				errors.AddWithCode(fieldName, "form field is required", val.ErrCodeRequired, nil)
+
+				return nil
+			}
+
+			if defaultVal := field.Tag.Get("default"); defaultVal != "" {
+				present = strings.Split(defaultVal, ",")
+			}
+		}
+
+		switch len(present) {
+		case 0:
+			return nil
+		case 1:
+			// A single occurrence goes through setFieldValue so that a
+			// comma-separated value (scope=openid,profile) expands the same way
+			// it does for a query or header parameter. Splitting only ever
+			// applies to a lone value; repeated parameters are taken verbatim.
+			return setFieldValue(fieldValue, present[0], fieldName, errors)
+		default:
+			return setSliceFieldValue(fieldValue, present, fieldName, errors)
+		}
+	}
+
+	value := values.Get(fieldName)
+
+	if required && value == "" {
+		errors.AddWithCode(fieldName, "form field is required", val.ErrCodeRequired, nil)
+
+		return nil
+	}
+
+	// Use default if provided and value is empty
+	if value == "" {
+		if defaultVal := field.Tag.Get("default"); defaultVal != "" {
+			value = defaultVal
+		}
+	}
+
+	if value != "" {
+		return setFieldValue(fieldValue, value, fieldName, errors)
+	}
+
+	return nil
+}
+
+// structHasFormFields reports whether any field of rt, including fields of
+// flattened embedded structs, binds from the form body.
+func structHasFormFields(rt reflect.Type) bool {
+	for i := range rt.NumField() {
+		field := rt.Field(i)
+
+		if tag := field.Tag.Get("form"); tag != "" && tag != "-" {
+			return true
+		}
+
+		if !field.Anonymous {
+			continue
+		}
+
+		embedded := field.Type
+		if embedded.Kind() == reflect.Pointer {
+			embedded = embedded.Elem()
+		}
+
+		if embedded.Kind() == reflect.Struct && structHasFormFields(embedded) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// mediaType strips any parameters (charset, boundary) from a Content-Type so
+// the bare type can be named in an error.
+func mediaType(contentType string) string {
+	base, _, _ := strings.Cut(contentType, ";")
+
+	return strings.TrimSpace(base)
+}
+
 // bindBodyFields binds body/json tagged fields.
 func (c *Ctx) bindBodyFields(v any, rt reflect.Type) error {
 	// Check if struct has body fields
@@ -272,6 +434,21 @@ func (c *Ctx) bindBodyFields(v any, rt reflect.Type) error {
 
 	if !hasBodyFields {
 		return nil
+	}
+
+	if c.hasFormBody() {
+		// Fields tagged form:"..." were already read by bindFormParam, and a
+		// form body holds nothing else for Bind to decode.
+		if structHasFormFields(rt) {
+			return nil
+		}
+
+		// The struct declares body fields, but none of them opted into form
+		// binding, so not one would be populated. Reporting success here is how
+		// a form-encoded POST used to reach its handler holding an entirely
+		// zero request, failing later with an error that named the wrong cause.
+		return fmt.Errorf("cannot bind %s body into %s: no field is tagged `form:\"...\"`",
+			mediaType(c.request.Header.Get("Content-Type")), rt.String())
 	}
 
 	// Bind body content using existing Bind method
@@ -395,9 +572,65 @@ func setFieldValue(fieldValue reflect.Value, value string, fieldName string, err
 
 		fieldValue.SetBool(boolVal)
 
+	case reflect.Slice:
+		// []byte is a slice by type but a single scalar in practice.
+		if fieldValue.Type().Elem().Kind() == reflect.Uint8 {
+			fieldValue.SetBytes([]byte(value))
+
+			return nil
+		}
+
+		// A lone comma-separated value (scopes=read,write) expands into a
+		// slice. Repeated parameters take the setSliceFieldValue path instead.
+		return setSliceFieldValue(fieldValue, strings.Split(value, ","), fieldName, errors)
+
 	default:
 		errors.AddWithCode(fieldName, fmt.Sprintf("unsupported field type: %s", fieldValue.Kind()), val.ErrCodeInvalidType, value)
 	}
+
+	return nil
+}
+
+// isMultiValueTarget reports whether a field should be filled from every
+// occurrence of a repeated parameter rather than from the first one only.
+// []byte is excluded, since it stands for a single scalar value.
+func isMultiValueTarget(fieldValue reflect.Value) bool {
+	t := fieldValue.Type()
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	return t.Kind() == reflect.Slice && t.Elem().Kind() != reflect.Uint8
+}
+
+// setSliceFieldValue fills a slice field from a repeated parameter
+// (scope=openid&scope=profile), converting each element through setFieldValue.
+func setSliceFieldValue(fieldValue reflect.Value, values []string, fieldName string, errors *val.ValidationError) error {
+	if fieldValue.Kind() == reflect.Pointer {
+		if fieldValue.IsNil() {
+			fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
+		}
+
+		return setSliceFieldValue(fieldValue.Elem(), values, fieldName, errors)
+	}
+
+	// Nested slices have no unambiguous wire form, and allowing them here would
+	// let setFieldValue and this function recurse into each other.
+	if elemKind := fieldValue.Type().Elem().Kind(); elemKind == reflect.Slice || elemKind == reflect.Array {
+		errors.AddWithCode(fieldName, fmt.Sprintf("unsupported field type: %s", fieldValue.Type()), val.ErrCodeInvalidType, nil)
+
+		return nil
+	}
+
+	slice := reflect.MakeSlice(fieldValue.Type(), len(values), len(values))
+
+	for i, value := range values {
+		if err := setFieldValue(slice.Index(i), value, fieldName, errors); err != nil {
+			return err
+		}
+	}
+
+	fieldValue.Set(slice)
 
 	return nil
 }
