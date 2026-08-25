@@ -1,3 +1,9 @@
+## [1.1.8](https://github.com/xraph/go-utils/compare/v1.1.7...v1.1.8) (2026-08-25)
+
+### Bug Fixes
+
+* **http:** bind every occurrence of a repeated query parameter ([#4](https://github.com/xraph/go-utils/issues/4)) ([6b31905](https://github.com/xraph/go-utils/commit/6b3190539168afb83230845937d6450d9bb1a185))
+
 ## [1.1.7](https://github.com/xraph/go-utils/compare/v1.1.6...v1.1.7) (2026-08-24)
 
 ### Bug Fixes
