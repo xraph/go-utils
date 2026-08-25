@@ -16,7 +16,7 @@ import (
 type QueryMultiRequest struct {
 	ClientID  string   `query:"client_id"`
 	Resources []string `query:"resource,omitempty"`
-	Scopes    []string `default:"openid,profile" query:"scope,omitempty"`
+	Scopes    []string `default:"openid,profile"   query:"scope,omitempty"`
 }
 
 func getQuery(t *testing.T, target string) *Ctx {
@@ -83,6 +83,7 @@ func TestBindRequest_RequiredQuerySliceReportsWhenAbsent(t *testing.T) {
 	}
 
 	var req required
+
 	err := getQuery(t, "/authorize").BindRequest(&req)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resource")
