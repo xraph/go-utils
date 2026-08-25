@@ -188,8 +188,6 @@ func (c *Ctx) bindQueryParam(field reflect.StructField, fieldValue reflect.Value
 		paramName = field.Name
 	}
 
-	value := c.Query(paramName)
-
 	// Determine if field is required using consistent precedence:
 	// 1. optional:"true" - explicitly optional (highest priority)
 	// 2. required:"true" - explicitly required
@@ -197,6 +195,40 @@ func (c *Ctx) bindQueryParam(field reflect.StructField, fieldValue reflect.Value
 	// 4. pointer type - optional
 	// 5. default: non-pointer types are required
 	required := isBindFieldRequired(field, tag)
+
+	// Repeated parameters (resource=a&resource=b) fill a slice field. Reading
+	// a single value through Query would keep the first occurrence and drop
+	// the rest, which for something like an RFC 8707 resource indicator
+	// silently narrows what the caller asked for.
+	if isMultiValueTarget(fieldValue) {
+		present := c.queryValues()[paramName]
+		if len(present) == 0 {
+			if required {
+				errors.AddWithCode(paramName, "query parameter is required", val.ErrCodeRequired, nil)
+
+				return nil
+			}
+
+			if defaultVal := field.Tag.Get("default"); defaultVal != "" {
+				present = strings.Split(defaultVal, ",")
+			}
+		}
+
+		switch len(present) {
+		case 0:
+			return nil
+		case 1:
+			// A single occurrence goes through setFieldValue so that a
+			// comma-separated value (scope=openid,profile) expands the same way
+			// it always has. Splitting only ever applies to a lone value;
+			// repeated parameters are taken verbatim.
+			return setFieldValue(fieldValue, present[0], paramName, errors)
+		default:
+			return setSliceFieldValue(fieldValue, present, paramName, errors)
+		}
+	}
+
+	value := c.Query(paramName)
 
 	if required && value == "" {
 		errors.AddWithCode(paramName, "query parameter is required", val.ErrCodeRequired, nil)
