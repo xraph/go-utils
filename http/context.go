@@ -91,7 +91,7 @@ func NewContext(w http.ResponseWriter, r *http.Request, container di.Container) 
 		c.routeParams = rp
 		clear(c.params)
 		c.ownParams = true
-	} else if p := r.Context().Value("forge:params"); p != nil { //nolint:staticcheck // legacy contract, read as a fallback
+	} else if p := r.Context().Value("forge:params"); p != nil {
 		if paramMap, ok := p.(map[string]string); ok {
 			c.params = paramMap
 			c.ownParams = false

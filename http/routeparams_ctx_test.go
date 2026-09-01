@@ -16,7 +16,7 @@ func TestCtx_PrefersTheTypedCarrier(t *testing.T) {
 
 	p.Set("id", "42")
 
-	req := httptest.NewRequest(nethttp.MethodGet, "/users/42", nil)
+	req := httptest.NewRequestWithContext(t.Context(), nethttp.MethodGet, "/users/42", nil)
 	req = req.WithContext(context.WithValue(req.Context(), RouteParamsKey, p))
 
 	c := NewContext(httptest.NewRecorder(), req, nil).(*Ctx)
@@ -32,7 +32,7 @@ func TestCtx_PrefersTheTypedCarrier(t *testing.T) {
 // Version skew in one direction: an old router still writing the map must
 // keep working against a new go-utils.
 func TestCtx_FallsBackToTheLegacyMapKey(t *testing.T) {
-	req := httptest.NewRequest(nethttp.MethodGet, "/users/42", nil)
+	req := httptest.NewRequestWithContext(t.Context(), nethttp.MethodGet, "/users/42", nil)
 	req = req.WithContext(context.WithValue(req.Context(), "forge:params", map[string]string{"id": "42"})) //nolint:staticcheck // exercising the legacy contract
 
 	c := NewContext(httptest.NewRecorder(), req, nil).(*Ctx)
@@ -49,7 +49,7 @@ func TestCtx_TypedCarrierBeatsTheLegacyMap(t *testing.T) {
 
 	p.Set("id", "typed")
 
-	req := httptest.NewRequest(nethttp.MethodGet, "/users/42", nil)
+	req := httptest.NewRequestWithContext(t.Context(), nethttp.MethodGet, "/users/42", nil)
 	ctx := context.WithValue(req.Context(), "forge:params", map[string]string{"id": "legacy"}) //nolint:staticcheck // exercising the legacy contract
 	ctx = context.WithValue(ctx, RouteParamsKey, p)
 	req = req.WithContext(ctx)
@@ -67,7 +67,7 @@ func TestCtx_ParamsMaterializesFromTheCarrier(t *testing.T) {
 	p.Set("id", "42")
 	p.Set("slug", "hello")
 
-	req := httptest.NewRequest(nethttp.MethodGet, "/x", nil)
+	req := httptest.NewRequestWithContext(t.Context(), nethttp.MethodGet, "/x", nil)
 	req = req.WithContext(context.WithValue(req.Context(), RouteParamsKey, p))
 
 	c := NewContext(httptest.NewRecorder(), req, nil).(*Ctx)
@@ -77,7 +77,7 @@ func TestCtx_ParamsMaterializesFromTheCarrier(t *testing.T) {
 }
 
 func TestCtx_NoParamsAtAll(t *testing.T) {
-	req := httptest.NewRequest(nethttp.MethodGet, "/x", nil)
+	req := httptest.NewRequestWithContext(t.Context(), nethttp.MethodGet, "/x", nil)
 
 	c := NewContext(httptest.NewRecorder(), req, nil).(*Ctx)
 	defer c.Cleanup()
@@ -94,14 +94,14 @@ func TestCtx_CleanupClearsTheCarrier(t *testing.T) {
 
 	p.Set("id", "42")
 
-	req := httptest.NewRequest(nethttp.MethodGet, "/x", nil)
+	req := httptest.NewRequestWithContext(t.Context(), nethttp.MethodGet, "/x", nil)
 	req = req.WithContext(context.WithValue(req.Context(), RouteParamsKey, p))
 
 	first := NewContext(httptest.NewRecorder(), req, nil).(*Ctx)
 	require.Equal(t, "42", first.Param("id"))
 	first.Cleanup()
 
-	plain := httptest.NewRequest(nethttp.MethodGet, "/y", nil)
+	plain := httptest.NewRequestWithContext(t.Context(), nethttp.MethodGet, "/y", nil)
 
 	second := NewContext(httptest.NewRecorder(), plain, nil).(*Ctx)
 	defer second.Cleanup()

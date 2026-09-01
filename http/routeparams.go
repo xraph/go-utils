@@ -1,6 +1,9 @@
 package http
 
-import "sync"
+import (
+	"maps"
+	"sync"
+)
 
 // routeParamsInline is the number of parameters stored without touching the
 // heap. Routes with more than this are rare enough that the spill map is not
@@ -132,9 +135,7 @@ func (p *RouteParams) Clone() map[string]string {
 		out[p.names[i]] = p.values[i]
 	}
 
-	for k, v := range p.spill {
-		out[k] = v
-	}
+	maps.Copy(out, p.spill)
 
 	return out
 }
