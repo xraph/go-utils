@@ -1,3 +1,10 @@
+## [1.2.0](https://github.com/xraph/go-utils/compare/v1.1.8...v1.2.0) (2026-09-01)
+
+### Features
+
+* **http:** pooled RouteParams carrier for path parameters ([067e672](https://github.com/xraph/go-utils/commit/067e67275562acf59b1ad62c0788e7ced9244e5b))
+* **http:** read path params from the typed carrier, map as fallback ([6a82328](https://github.com/xraph/go-utils/commit/6a823281d25e56ac52a4ec0339be1d3d2b97095d))
+
 ## [1.1.8](https://github.com/xraph/go-utils/compare/v1.1.7...v1.1.8) (2026-08-25)
 
 ### Bug Fixes
