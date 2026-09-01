@@ -50,9 +50,13 @@ type Ctx struct {
 	metrics       Metrics
 	healthManager HealthManager
 	session       Session
-	sessionStore  any  // Will be SessionStore interface from security extension
-	ownParams     bool // true if params map is owned (pooled), false if borrowed from router
-	ownValues     bool // true if values map is owned (pooled), false if borrowed via ShareValues
+	sessionStore  any // Will be SessionStore interface from security extension
+	// routeParams is the typed carrier a modern router publishes. It takes
+	// precedence over params, which is the legacy map contract.
+	routeParams *RouteParams
+
+	ownParams bool // true if params map is owned (pooled), false if borrowed from router
+	ownValues bool // true if values map is owned (pooled), false if borrowed via ShareValues
 }
 
 // httpResponseBuilder provides fluent response building.
@@ -78,9 +82,16 @@ func NewContext(w http.ResponseWriter, r *http.Request, container di.Container) 
 	c.session = nil
 	c.sessionStore = nil
 
-	// Extract params from request context (set by router adapter).
-	// Use the router's map directly instead of copying — avoids an allocation.
-	if p := r.Context().Value("forge:params"); p != nil {
+	// Extract params from the request context (set by the router adapter).
+	// Prefer the typed carrier; the string-keyed map is the legacy contract
+	// and is still read so an older router keeps working.
+	c.routeParams = nil
+
+	if rp, ok := r.Context().Value(RouteParamsKey).(*RouteParams); ok && rp != nil {
+		c.routeParams = rp
+		clear(c.params)
+		c.ownParams = true
+	} else if p := r.Context().Value("forge:params"); p != nil { //nolint:staticcheck // legacy contract, read as a fallback
 		if paramMap, ok := p.(map[string]string); ok {
 			c.params = paramMap
 			c.ownParams = false
@@ -119,17 +130,37 @@ func (c *Ctx) Response() http.ResponseWriter {
 
 // Param returns a path parameter.
 func (c *Ctx) Param(name string) string {
+	return c.lookupParam(name)
+}
+
+// lookupParam is the single read path for every parameter accessor. The typed
+// carrier wins when present; otherwise the legacy map is consulted.
+func (c *Ctx) lookupParam(name string) string {
+	if c.routeParams != nil {
+		v, _ := c.routeParams.Get(name)
+
+		return v
+	}
+
 	return c.params[name]
 }
 
-// Params returns all path parameters.
+// Params returns all path parameters as a map.
+//
+// When a typed carrier is in use this allocates, so it is deliberately not on
+// the hot path: binding reads parameters by name through Param, and only a
+// caller that genuinely wants the whole set pays for the map.
 func (c *Ctx) Params() map[string]string {
+	if c.routeParams != nil {
+		return c.routeParams.Clone()
+	}
+
 	return c.params
 }
 
 // ParamInt returns a path parameter as int.
 func (c *Ctx) ParamInt(name string) (int, error) {
-	val := c.params[name]
+	val := c.lookupParam(name)
 	if val == "" {
 		return 0, fmt.Errorf("param %s not found", name)
 	}
@@ -139,7 +170,7 @@ func (c *Ctx) ParamInt(name string) (int, error) {
 
 // ParamInt64 returns a path parameter as int64.
 func (c *Ctx) ParamInt64(name string) (int64, error) {
-	val := c.params[name]
+	val := c.lookupParam(name)
 	if val == "" {
 		return 0, fmt.Errorf("param %s not found", name)
 	}
@@ -149,7 +180,7 @@ func (c *Ctx) ParamInt64(name string) (int64, error) {
 
 // ParamFloat64 returns a path parameter as float64.
 func (c *Ctx) ParamFloat64(name string) (float64, error) {
-	val := c.params[name]
+	val := c.lookupParam(name)
 	if val == "" {
 		return 0, fmt.Errorf("param %s not found", name)
 	}
@@ -159,7 +190,7 @@ func (c *Ctx) ParamFloat64(name string) (float64, error) {
 
 // ParamBool returns a path parameter as bool.
 func (c *Ctx) ParamBool(name string) (bool, error) {
-	val := c.params[name]
+	val := c.lookupParam(name)
 	if val == "" {
 		return false, fmt.Errorf("param %s not found", name)
 	}
@@ -819,7 +850,16 @@ func (c *Ctx) SessionID() string {
 }
 
 // setParam sets a path parameter (internal).
+//
+// It writes into whichever store lookupParam reads, so the two never
+// disagree. Only tests call this today.
 func (c *Ctx) setParam(key, value string) {
+	if c.routeParams != nil {
+		c.routeParams.Set(key, value)
+
+		return
+	}
+
 	c.params[key] = value
 }
 
@@ -850,6 +890,10 @@ func (c *Ctx) Cleanup() {
 	c.metrics = nil
 	c.healthManager = nil
 	c.query = nil
+
+	// A carrier surviving into the next pooled Ctx is exactly the
+	// cross-request bleed this design has to avoid.
+	c.routeParams = nil
 
 	// Restore owned params map if we borrowed the router's map
 	if !c.ownParams {
