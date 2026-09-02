@@ -16,26 +16,28 @@ import (
 // value into an interface. It is a type-level question and is answered with
 // reflect.Type.Implements now.
 type benchBindReq struct {
-	OrgID     string `path:"orgId"      validate:"required"`
-	UserID    string `path:"userId"     validate:"required"`
+	OrgID     string `path:"orgId"          validate:"required"`
+	UserID    string `path:"userId"         validate:"required"`
 	Page      int    `query:"page"`
 	PerPage   int    `query:"perPage"`
 	Search    string `query:"search"`
 	RequestID string `header:"X-Request-Id"`
-	Name      string `json:"name"       validate:"required"`
+	Name      string `json:"name"           validate:"required"`
 	Email     string `json:"email"`
 	Age       int    `json:"age"`
 	Note      string `json:"note"`
 }
 
-type nopCloser struct{ *bytes.Reader }
+type benchNopCloser struct{ *bytes.Reader }
 
-func (nopCloser) Close() error { return nil }
+func (benchNopCloser) Close() error { return nil }
 
-func benchBindRequest(b *testing.B) *gohttp.Request {
-	b.Helper()
+func benchBindRequest(tb testing.TB) *gohttp.Request {
+	tb.Helper()
 
-	req := httptest.NewRequest(gohttp.MethodPost, "/orgs/o1/users/u1?page=2&perPage=50&search=abc", nil)
+	req := httptest.NewRequestWithContext(
+		tb.Context(), gohttp.MethodPost, "/orgs/o1/users/u1?page=2&perPage=50&search=abc", nil,
+	)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-Id", "req-123")
 
@@ -58,12 +60,17 @@ func BenchmarkBindRequest_Full(b *testing.B) {
 
 	for b.Loop() {
 		reader.Reset(body)
-		req.Body = nopCloser{reader}
+
+		req.Body = benchNopCloser{reader}
 		req.ContentLength = int64(len(body))
 
-		c := NewContext(w, req, nil).(*Ctx)
+		c, ok := NewContext(w, req, nil).(*Ctx)
+		if !ok {
+			b.Fatal("unexpected Context implementation")
+		}
 
 		var out benchBindReq
+
 		if err := c.BindRequest(&out); err != nil {
 			b.Fatalf("bind: %v", err)
 		}
@@ -72,10 +79,10 @@ func BenchmarkBindRequest_Full(b *testing.B) {
 	}
 }
 
-// No body at all: isolates the path/query/header walk from JSON decoding.
+// benchBindNoBody isolates the path and query walk from JSON decoding.
 type benchBindNoBody struct {
-	OrgID   string `path:"orgId"  validate:"required"`
-	UserID  string `path:"userId" validate:"required"`
+	OrgID   string `path:"orgId"    validate:"required"`
+	UserID  string `path:"userId"   validate:"required"`
 	Page    int    `query:"page"`
 	PerPage int    `query:"perPage"`
 	Search  string `query:"search"`
@@ -84,15 +91,20 @@ type benchBindNoBody struct {
 func BenchmarkBindRequest_NoBody(b *testing.B) {
 	req := benchBindRequest(b)
 	req.Method = gohttp.MethodGet
+
 	w := httptest.NewRecorder()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for b.Loop() {
-		c := NewContext(w, req, nil).(*Ctx)
+		c, ok := NewContext(w, req, nil).(*Ctx)
+		if !ok {
+			b.Fatal("unexpected Context implementation")
+		}
 
 		var out benchBindNoBody
+
 		if err := c.BindRequest(&out); err != nil {
 			b.Fatalf("bind: %v", err)
 		}
