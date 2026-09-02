@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,7 +43,6 @@ type Ctx struct {
 	response      http.ResponseWriter
 	params        map[string]string
 	values        map[string]any
-	query         url.Values // cached parsed query params (lazy)
 	scope         di.Scope
 	container     di.Container
 	metrics       Metrics
@@ -75,7 +73,6 @@ func NewContext(w http.ResponseWriter, r *http.Request, container di.Container) 
 	c.request = r
 	c.response = w
 	c.container = container
-	c.query = nil // reset cached query
 	c.scope = nil // lazy — allocated on first Scope()/Resolve() call
 	c.metrics = nil
 	c.healthManager = nil
@@ -238,25 +235,21 @@ func (c *Ctx) ParamBoolDefault(name string, defaultValue bool) bool {
 	return val
 }
 
-// queryValues returns parsed query parameters, caching the result.
-// Go's URL.Query() re-parses the query string on every call;
-// this avoids redundant parsing when Query() is called multiple times.
-func (c *Ctx) queryValues() url.Values {
-	if c.query == nil {
-		c.query = c.request.URL.Query()
-	}
-
-	return c.query
-}
-
-// Query returns a query parameter.
+// Query returns the first value recorded for a query parameter, or "" when it
+// is absent.
+//
+// The raw query is scanned for this one key rather than parsed into a
+// url.Values. See query.go for why, and for the fuzz test that holds the
+// scanner to url.ParseQuery's semantics.
 func (c *Ctx) Query(name string) string {
-	return c.queryValues().Get(name)
+	value, _ := c.queryFirst(name)
+
+	return value
 }
 
 // QueryDefault returns a query parameter with default value.
 func (c *Ctx) QueryDefault(name, defaultValue string) string {
-	val := c.queryValues().Get(name)
+	val, _ := c.queryFirst(name)
 	if val == "" {
 		return defaultValue
 	}
@@ -889,7 +882,6 @@ func (c *Ctx) Cleanup() {
 	c.sessionStore = nil
 	c.metrics = nil
 	c.healthManager = nil
-	c.query = nil
 
 	// A carrier surviving into the next pooled Ctx is exactly the
 	// cross-request bleed this design has to avoid.

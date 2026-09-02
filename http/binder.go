@@ -209,7 +209,7 @@ func (c *Ctx) bindQueryParam(field reflect.StructField, fieldValue reflect.Value
 	// the rest, which for something like an RFC 8707 resource indicator
 	// silently narrows what the caller asked for.
 	if isMultiValueTarget(fieldValue) {
-		present := c.queryValues()[paramName]
+		present := c.queryAll(paramName)
 		if len(present) == 0 {
 			if required {
 				errors.AddWithCode(paramName, "query parameter is required", val.ErrCodeRequired, nil)
