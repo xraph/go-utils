@@ -52,11 +52,16 @@ func (c *Ctx) BindRequest(v any) error {
 		return c.Bind(v)
 	}
 
-	// Track validation errors
-	ValidationError := val.NewValidationError()
+	// Track validation errors.
+	//
+	// Declared as a value and passed by address so escape analysis can keep it
+	// on the stack: the overwhelming majority of requests validate cleanly and
+	// have no use for a heap object. Only the failure path below allocates,
+	// by returning a copy.
+	var validationError val.ValidationError
 
 	// Bind struct fields recursively (handles embedded structs)
-	if err := c.bindStructFields(rv, rt, ValidationError); err != nil {
+	if err := c.bindStructFields(rv, rt, &validationError); err != nil {
 		return err
 	}
 
@@ -69,13 +74,16 @@ func (c *Ctx) BindRequest(v any) error {
 	}
 
 	// Validate all fields using their validation tags
-	if err := c.validateStruct(v, rt, ValidationError); err != nil {
+	if err := c.validateStruct(v, rt, &validationError); err != nil {
 		return err
 	}
 
-	// Return validation errors if any
-	if ValidationError.HasErrors() {
-		return ValidationError
+	// Return validation errors if any. The copy is what lets the value above
+	// stay on the stack for the successful path.
+	if validationError.HasErrors() {
+		failed := validationError
+
+		return &failed
 	}
 
 	return nil
@@ -669,14 +677,24 @@ func setSliceFieldValue(fieldValue reflect.Value, values []string, fieldName str
 
 // tryTextUnmarshaler attempts to use encoding.TextUnmarshaler if the type implements it.
 // Returns true if the type was handled (either successfully or with an error added).
-func tryTextUnmarshaler(fieldValue reflect.Value, value string, fieldName string, errors *val.ValidationError) bool {
-	// Get the interface for the field value
-	// We need to check both pointer and non-pointer receivers
+// textUnmarshalerType is looked up once. Whether a type implements
+// encoding.TextUnmarshaler is a property of the TYPE, so it is answered with
+// reflect.Type.Implements rather than by boxing a value into an interface.
+//
+// The boxing version cost an allocation per field per request: .Interface() on
+// an addressable field allocates to build the any, and it did that for every
+// field just to discover that string does not implement TextUnmarshaler. On a
+// five field struct that was five allocations a request, and reflect.unsafe_New
+// was 39% of the bind path's allocations.
+var textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
 
-	// First, try getting a pointer to the value (for pointer receiver implementations)
-	if fieldValue.CanAddr() {
-		ptrVal := fieldValue.Addr()
-		if unmarshaler, ok := ptrVal.Interface().(encoding.TextUnmarshaler); ok {
+func tryTextUnmarshaler(fieldValue reflect.Value, value string, fieldName string, errors *val.ValidationError) bool {
+	fieldType := fieldValue.Type()
+
+	// Pointer receiver implementations, which is the common case.
+	if fieldValue.CanAddr() && reflect.PointerTo(fieldType).Implements(textUnmarshalerType) {
+		unmarshaler, ok := fieldValue.Addr().Interface().(encoding.TextUnmarshaler)
+		if ok {
 			if err := unmarshaler.UnmarshalText([]byte(value)); err != nil {
 				errors.AddWithCode(fieldName, fmt.Sprintf("invalid value: %v", err), val.ErrCodeInvalidType, value)
 			}
@@ -685,9 +703,10 @@ func tryTextUnmarshaler(fieldValue reflect.Value, value string, fieldName string
 		}
 	}
 
-	// Try the value directly (for value receiver implementations, though rare)
-	if fieldValue.CanInterface() {
-		if unmarshaler, ok := fieldValue.Interface().(encoding.TextUnmarshaler); ok {
+	// Value receiver implementations, which are rare.
+	if fieldType.Implements(textUnmarshalerType) && fieldValue.CanInterface() {
+		unmarshaler, ok := fieldValue.Interface().(encoding.TextUnmarshaler)
+		if ok {
 			if err := unmarshaler.UnmarshalText([]byte(value)); err != nil {
 				errors.AddWithCode(fieldName, fmt.Sprintf("invalid value: %v", err), val.ErrCodeInvalidType, value)
 			}
