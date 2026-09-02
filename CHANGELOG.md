@@ -1,3 +1,13 @@
+## [1.2.1](https://github.com/xraph/go-utils/compare/v1.2.0...v1.2.1) (2026-09-02)
+
+### Bug Fixes
+
+* **http:** satisfy the linters in the new binder tests ([a41366f](https://github.com/xraph/go-utils/commit/a41366f477ca47732037103d4ec8fa0140f3b847))
+
+### Performance Improvements
+
+* **http:** stop allocating per field while binding a request ([da40a07](https://github.com/xraph/go-utils/commit/da40a07846b5de57bc86c06b6ebf90be6624303d))
+
 ## [1.2.0](https://github.com/xraph/go-utils/compare/v1.1.8...v1.2.0) (2026-09-01)
 
 ### Features
