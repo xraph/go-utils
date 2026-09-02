@@ -474,24 +474,31 @@ func TestPushableCollectorBuilder_PushBufferFull(t *testing.T) {
 	builder := NewPushableCollectorBuilder(source).
 		WithBufferSize(2) // Small buffer
 
-	err := builder.Start()
-	require.NoError(t, err)
-
-	defer builder.Stop()
+	// Mark the collector started WITHOUT calling Start().
+	//
+	// Start() also launches collectLoopWithPush, which drains pushChan. That
+	// consumer races the pushes below: if it takes an item between them the
+	// buffer never fills, the third push succeeds, and the assertion fails.
+	// This test was flaky in CI for exactly that reason, roughly one run in
+	// ten locally.
+	//
+	// Push only checks the started flag and the channel, both of which are
+	// ready here, so this exercises the buffer-full branch with nothing
+	// competing for the buffer. WithBufferSize creates pushChan, so no part of
+	// Start() is needed to make the push path work.
+	builder.started.Store(true)
+	defer builder.started.Store(false)
 
 	snapshot := &MetricSnapshot{
 		Counters: map[string]float64{"test": 1},
 	}
 
-	// Fill the buffer
-	err = builder.Push(snapshot)
-	assert.NoError(t, err)
-	err = builder.Push(snapshot)
-	assert.NoError(t, err)
+	// Fill the buffer.
+	require.NoError(t, builder.Push(snapshot))
+	require.NoError(t, builder.Push(snapshot))
 
-	// Next push should fail
-	err = builder.Push(snapshot)
-	assert.ErrorIs(t, err, ErrPushBufferFull)
+	// The buffer holds two, so the third has nowhere to go.
+	assert.ErrorIs(t, builder.Push(snapshot), ErrPushBufferFull)
 }
 
 func TestPushableCollectorBuilder_HybridMode(t *testing.T) {
