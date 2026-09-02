@@ -1,3 +1,9 @@
+## [1.2.2](https://github.com/xraph/go-utils/compare/v1.2.1...v1.2.2) (2026-09-02)
+
+### Performance Improvements
+
+* **http:** scan the raw query instead of building a url.Values ([5b08fc3](https://github.com/xraph/go-utils/commit/5b08fc32b2dc1f7bd29fda5f3b251949f2c9fee5))
+
 ## [1.2.1](https://github.com/xraph/go-utils/compare/v1.2.0...v1.2.1) (2026-09-02)
 
 ### Bug Fixes
