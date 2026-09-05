@@ -81,6 +81,12 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 		dst = time.Unix(0, f.num).UTC().AppendFormat(dst, time.RFC3339Nano)
 
 		return append(dst, '"')
+	case timeFullType:
+		t, _ := f.iface.(time.Time)
+		dst = append(dst, '"')
+		dst = t.AppendFormat(dst, time.RFC3339Nano)
+
+		return append(dst, '"')
 	case errorType:
 		err, _ := f.iface.(error)
 		if err == nil {

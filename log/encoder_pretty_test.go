@@ -70,6 +70,18 @@ func TestPrettyEncoderGolden(t *testing.T) {
 	checkGolden(t, "pretty_basic.golden", prettyLines(enc, entries, fields))
 }
 
+// Regression test: Time used to store every value as UnixNano unconditionally,
+// which wraps outside roughly 1678-2262 and rendered the zero time.Time as
+// 1754-08-30T22:43:41Z instead of a recognisable zero value.
+func TestPrettyEncoderRendersZeroTimeRecognisably(t *testing.T) {
+	enc := newPrettyEncoder(false, 120)
+	out := enc.encode(nil, entry{lvl: infoLevel, msg: "m"}, []Field{Time("t", time.Time{})})
+
+	if !strings.Contains(string(out), "t=0001-01-01") {
+		t.Errorf("zero time not rendered recognisably: %q", out)
+	}
+}
+
 func TestPrettyEncoderWrapsLongFieldSets(t *testing.T) {
 	ts := time.Date(2026, 9, 5, 15, 4, 7, 1000000, time.UTC)
 	enc := newPrettyEncoder(false, 100)

@@ -20,6 +20,7 @@ const (
 	boolType
 	durationType
 	timeType
+	timeFullType
 	errorType
 	stringerType
 	stringsType
@@ -58,6 +59,10 @@ func (f Field) Value() any {
 		return time.Duration(f.num)
 	case timeType:
 		return time.Unix(0, f.num).UTC()
+	case timeFullType:
+		t, _ := f.iface.(time.Time)
+
+		return t
 	case lazyType:
 		if fn, ok := f.iface.(func() any); ok {
 			return fn()
@@ -97,7 +102,15 @@ var (
 
 		return Field{key: key, typ: boolType, num: n}
 	}
+	// Time stores the value as UnixNano when it fits, which keeps the field
+	// allocation-free. Outside roughly 1678-2262 UnixNano silently wraps, so
+	// those values (the zero time.Time among them) keep the whole time.Time in
+	// the interface slot instead.
 	Time = func(key string, val time.Time) Field {
+		if val.Before(time.Unix(0, math.MinInt64)) || val.After(time.Unix(0, math.MaxInt64)) {
+			return Field{key: key, typ: timeFullType, iface: val}
+		}
+
 		return Field{key: key, typ: timeType, num: val.UnixNano()}
 	}
 	Duration = func(key string, val time.Duration) Field {

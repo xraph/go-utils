@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+// stringerVal is a comparable fmt.Stringer used to exercise the Stringer
+// field type without dragging in a full test double.
+type stringerVal string
+
+func (s stringerVal) String() string { return string(s) }
+
 func TestFieldValueRoundTrip(t *testing.T) {
 	err := errors.New("boom")
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
@@ -26,6 +32,12 @@ func TestFieldValueRoundTrip(t *testing.T) {
 		{"bool false", Bool("k", false), false},
 		{"duration", Duration("k", 3*time.Second), 3 * time.Second},
 		{"error", Error(err), err},
+		{"stringer", Stringer("k", stringerVal("hi")), stringerVal("hi")},
+		{"any", Any("k", 99), 99},
+		{"conditional true", Conditional(true, "k", 5), 5},
+		{"conditional false", Conditional(false, "k", 5), nil},
+		{"nullable nil", Nullable("k", nil), "null"},
+		{"nullable value", Nullable("k", 7), 7},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -42,6 +54,36 @@ func TestFieldValueRoundTrip(t *testing.T) {
 	if got := Time("k", now).Value().(time.Time); !got.Equal(now) {
 		t.Errorf("Time round trip = %v, want %v", got, now)
 	}
+
+	// Strings holds a slice, which is not comparable with !=, so it gets its
+	// own assertion rather than a slot in the table above.
+	gotStrings, ok := Strings("k", []string{"a", "b"}).Value().([]string)
+	if !ok || len(gotStrings) != 2 || gotStrings[0] != "a" || gotStrings[1] != "b" {
+		t.Errorf("Strings round trip = %#v, want [a b]", gotStrings)
+	}
+}
+
+func TestTimeSurvivesOutOfRangeValues(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   time.Time
+	}{
+		{"zero", time.Time{}},
+		{"far future", time.Date(2300, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{"far past", time.Date(1500, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{"in range", time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := Time("t", tc.in).Value().(time.Time)
+			if !ok {
+				t.Fatalf("Value() is not a time.Time: %T", Time("t", tc.in).Value())
+			}
+
+			if !got.Equal(tc.in) {
+				t.Errorf("round trip = %v, want %v", got, tc.in)
+			}
+		})
+	}
 }
 
 func TestFieldFloatPrecision(t *testing.T) {
@@ -52,6 +94,22 @@ func TestFieldFloatPrecision(t *testing.T) {
 		if got := Float64("k", v).Value().(float64); got != v {
 			t.Errorf("Float64 round trip = %v, want %v", got, v)
 		}
+	}
+}
+
+// TestFloat32WidensToFloat64 pins down current behaviour rather than asserting
+// a round trip: Float32 is implemented in terms of Float64(key, float64(val)),
+// so a float32 that is not exactly representable widens with the extra binary
+// digits float32->float64 conversion introduces. zap kept a distinct float32
+// wire type and avoided this; this package does not, trading that precision
+// for one fewer field type. If this assertion ever needs to change, that is a
+// deliberate behaviour change, not a bug fix.
+func TestFloat32WidensToFloat64(t *testing.T) {
+	const want = 1.100000023841858
+
+	got := Float32("r", 1.1).Value().(float64)
+	if got != want {
+		t.Errorf("Float32(1.1).Value() = %v, want %v", got, want)
 	}
 }
 

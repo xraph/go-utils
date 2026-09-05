@@ -120,6 +120,23 @@ func TestJSONEncoderHandlesNilError(t *testing.T) {
 	}
 }
 
+// Regression test: Time used to store every value as UnixNano unconditionally,
+// which wraps outside roughly 1678-2262 and rendered the zero time.Time as
+// 1754-08-30T22:43:41Z instead of a recognisable zero value.
+func TestJSONEncoderRendersZeroTimeRecognisably(t *testing.T) {
+	out := (&jsonEncoder{}).encode(nil, testEntry(), []Field{Time("t", time.Time{})})
+
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, out)
+	}
+
+	ts, _ := got["t"].(string)
+	if !strings.HasPrefix(ts, "0001-01-01") {
+		t.Errorf("zero time rendered as %q, want a 0001-01-01 prefix", ts)
+	}
+}
+
 func TestJSONEncoderEvaluatesLazyFields(t *testing.T) {
 	out := (&jsonEncoder{}).encode(nil, testEntry(), []Field{Lazy("k", func() any { return "late" })})
 

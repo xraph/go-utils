@@ -247,6 +247,10 @@ func appendPrettyValue(dst []byte, f *Field) []byte {
 		return append(dst, time.Duration(f.num).String()...)
 	case timeType:
 		return time.Unix(0, f.num).UTC().AppendFormat(dst, time.RFC3339)
+	case timeFullType:
+		t, _ := f.iface.(time.Time)
+
+		return t.AppendFormat(dst, time.RFC3339)
 	case errorType:
 		err, _ := f.iface.(error)
 		if err == nil {
