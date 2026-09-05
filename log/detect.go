@@ -74,7 +74,7 @@ func isTerminal(w io.Writer) bool {
 		return false
 	}
 
-	return term.IsTerminal(int(f.Fd())) //nolint:gosec // G115: fds are small, non-negative; term.IsTerminal needs an int
+	return term.IsTerminal(int(f.Fd()))
 }
 
 // underTest reports whether this binary was built by `go test`. It checks for

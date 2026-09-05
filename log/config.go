@@ -94,7 +94,7 @@ func terminalWidth(w io.Writer) int {
 		return 120
 	}
 
-	width, _, err := term.GetSize(int(f.Fd())) //nolint:gosec // G115: fds are small, non-negative; term.GetSize needs an int
+	width, _, err := term.GetSize(int(f.Fd()))
 	if err != nil || width <= 0 {
 		return 120
 	}

@@ -213,6 +213,21 @@ linters:
         linters:
           - gosec
         text: "G115:"
+      # Exclude gosec G115 for the two uintptr->int file-descriptor conversions
+      # that term.GetSize and term.IsTerminal require. An fd is a small
+      # non-negative int on every platform we build for, so there is no
+      # meaningful overflow to guard against.
+      #
+      # This lives here rather than as an inline //nolint because golangci-lint
+      # versions disagree about whether G115 applies to uintptr->int at all:
+      # 2.10.x reports it, 2.12.x does not. An inline directive therefore fails
+      # one version or the other -- unused (nolintlint) on 2.12, or missing
+      # (gosec) on 2.10. A config exclusion that matches nothing is only a
+      # warning, so this is correct under both.
+      - path: log/(config|detect)\.go
+        linters:
+          - gosec
+        text: "G115:"
       # Exclude `lll` issues for long lines with `go:generate`.
       - linters:
           - lll
