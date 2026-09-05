@@ -2,27 +2,9 @@ package log
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"strings"
 	"time"
-
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
-
-var (
-	// Global logger instance.
-	globalLogger Logger
-)
-
-// logger implements the Logger interface using zap.
-type logger struct {
-	zap *zap.Logger
-}
-
-// noopLogger implements Logger interface but does nothing.
-type noopLogger struct{}
 
 // Context keys.
 type contextKey int
@@ -34,453 +16,6 @@ const (
 	userIDKey
 )
 
-type LogLevel string
-
-const (
-	LevelInfo  LogLevel = "info"
-	LevelWarn  LogLevel = "warn"
-	LevelError LogLevel = "error"
-	LevelFatal LogLevel = "fatal"
-	LevelDebug LogLevel = "debug"
-)
-
-// NewLogger creates a new logger with the given configuration.
-func NewLogger(config LoggingConfig) Logger {
-	var zapLogger *zap.Logger
-
-	// Determine log level
-	logLevel := zapcore.InfoLevel
-
-	switch strings.ToLower(string(config.Level)) {
-	case "debug":
-		logLevel = zapcore.DebugLevel
-	case "info":
-		logLevel = zapcore.InfoLevel
-	case "warn", "warning":
-		logLevel = zapcore.WarnLevel
-	case "error":
-		logLevel = zapcore.ErrorLevel
-	case "fatal":
-		logLevel = zapcore.FatalLevel
-	}
-
-	// Configure logger based on environment
-	if config.Environment == "production" || config.Format == "json" {
-		zapConfig := zap.NewProductionConfig()
-		zapConfig.Level = zap.NewAtomicLevelAt(logLevel)
-		zapLogger, _ = zapConfig.Build(zap.AddCallerSkip(1))
-	} else {
-		zapLogger = createDevelopmentLogger(logLevel)
-	}
-
-	return &logger{zap: zapLogger}
-}
-
-// NewDevelopmentLogger creates a development logger with enhanced colors.
-func NewDevelopmentLogger() Logger {
-	return &logger{zap: createDevelopmentLogger(zapcore.DebugLevel)}
-}
-
-// NewDevelopmentLoggerWithLevel creates a development logger with specified level.
-func NewDevelopmentLoggerWithLevel(level zapcore.Level) Logger {
-	return &logger{zap: createDevelopmentLogger(level)}
-}
-
-// NewProductionLogger creates a production logger.
-func NewProductionLogger() Logger {
-	config := zap.NewProductionConfig()
-	config.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
-	zapLogger, _ := config.Build(zap.AddCallerSkip(1))
-
-	return &logger{zap: zapLogger}
-}
-
-// NewNoopLogger creates a logger that does nothing.
-func NewNoopLogger() Logger {
-	return &noopLogger{}
-}
-
-// createDevelopmentLogger creates a development logger with enhanced formatting.
-func createDevelopmentLogger(level zapcore.Level) *zap.Logger {
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "ts",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalLevelEncoder, // Will be enhanced by our encoder
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.StringDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-
-	// Create colored write syncer to handle full-line coloring
-	writeSyncer := &ColoredWriteSyncer{
-		WriteSyncer: zapcore.AddSync(os.Stdout),
-	}
-
-	// Create core with colored encoder and write syncer
-	core := zapcore.NewCore(
-		createColoredEncoder(encoderConfig),
-		writeSyncer,
-		zap.NewAtomicLevelAt(level),
-	)
-
-	return zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
-}
-
-// enhancedColorLevelEncoder adds enhanced colors to log levels.
-func enhancedColorLevelEncoder(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
-	colorCode := colorForLevel(level)
-	levelText := level.CapitalString()
-	// Pad level text for clean alignment
-	paddedLevel := fmt.Sprintf("%-5s", levelText)
-	enc.AppendString(colorCode + paddedLevel + Reset)
-}
-
-// enhancedTimeEncoder formats timestamps with subtle coloring.
-func enhancedTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-	timestamp := t.Format("2006-01-02 15:04:05.000")
-	enc.AppendString(BrightBlack + timestamp + Reset)
-}
-
-// enhancedDurationEncoder formats durations with performance-based coloring.
-func enhancedDurationEncoder(d time.Duration, enc zapcore.PrimitiveArrayEncoder) {
-	var color string
-
-	switch {
-	case d > time.Second:
-		color = Red // Slow
-	case d > 100*time.Millisecond:
-		color = Yellow // Moderate
-	default:
-		color = Green // Fast
-	}
-
-	enc.AppendString(color + d.String() + Reset)
-}
-
-// enhancedCallerEncoder formats caller information with subtle highlighting.
-func enhancedCallerEncoder(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
-	if !caller.Defined {
-		enc.AppendString(BrightBlack + "undefined" + Reset)
-
-		return
-	}
-
-	enc.AppendString(Blue + caller.TrimmedPath() + Reset)
-}
-
-// colorForLevel returns the appropriate color for a log level (simple version).
-func colorForLevel(level zapcore.Level) string {
-	switch level {
-	case zapcore.DebugLevel:
-		return Cyan
-	case zapcore.InfoLevel:
-		return Green
-	case zapcore.WarnLevel:
-		return Yellow
-	case zapcore.ErrorLevel:
-		return Red
-	case zapcore.DPanicLevel, zapcore.PanicLevel, zapcore.FatalLevel:
-		return Magenta
-	default:
-		return Reset
-	}
-}
-
-// ColoredWriteSyncer wraps WriteSyncer to add full-line coloring and fix spacing.
-type ColoredWriteSyncer struct {
-	zapcore.WriteSyncer
-}
-
-// Write implements io.Writer with enhanced line coloring and spacing fixes.
-func (w *ColoredWriteSyncer) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-
-	// Fix spacing issues - replace excessive tabs with single spaces
-	var (
-		fixedLog   []byte
-		lastWasTab bool
-	)
-
-	for i := range p {
-		if p[i] == '\t' {
-			if !lastWasTab {
-				fixedLog = append(fixedLog, ' ')
-				lastWasTab = true
-			}
-		} else {
-			fixedLog = append(fixedLog, p[i])
-			lastWasTab = false
-		}
-	}
-
-	// Try to determine the log level from the content and apply color
-	var colorCode string
-
-	content := string(fixedLog)
-
-	// Look for level strings in the content
-	for i := range len(content) - 6 {
-		if content[i] == '[' || (i > 0 && content[i-1] == ' ') {
-			switch {
-			case i+5 < len(content) && content[i:i+5] == "DEBUG":
-				colorCode = Cyan
-			case i+4 < len(content) && content[i:i+4] == "INFO":
-				colorCode = Green
-			case i+4 < len(content) && content[i:i+4] == "WARN":
-				colorCode = Yellow
-			case i+5 < len(content) && content[i:i+5] == "ERROR":
-				colorCode = Red
-			case i+5 < len(content) && content[i:i+5] == "FATAL":
-				colorCode = Magenta
-			}
-
-			if colorCode != "" {
-				break
-			}
-		}
-	}
-
-	// If we couldn't determine the level, just write without additional coloring
-	if colorCode == "" {
-		return w.WriteSyncer.Write(fixedLog)
-	}
-
-	// Write with color prefix
-	colorPrefix := []byte(colorCode)
-	colorSuffix := []byte(Reset)
-
-	// Write color prefix with error handling
-	written, err := w.WriteSyncer.Write(colorPrefix)
-	if err != nil {
-		return written, fmt.Errorf("failed to write color prefix: %w", err)
-	}
-
-	// Write the content
-	n, err = w.WriteSyncer.Write(fixedLog)
-	if err != nil {
-		return n, fmt.Errorf("failed to write log content: %w", err)
-	}
-
-	// Write color suffix (reset)
-	_, err = w.WriteSyncer.Write(colorSuffix)
-	if err != nil {
-		return n, fmt.Errorf("failed to write color suffix: %w", err)
-	}
-
-	return n, nil
-}
-
-// createColoredEncoder creates an encoder with enhanced color support.
-func createColoredEncoder(encoderConfig zapcore.EncoderConfig) zapcore.Encoder {
-	// Override the level encoder to add colors and proper formatting
-	encoderConfig.EncodeLevel = enhancedColorLevelEncoder
-	encoderConfig.EncodeTime = enhancedTimeEncoder
-	encoderConfig.EncodeDuration = enhancedDurationEncoder
-	encoderConfig.EncodeCaller = enhancedCallerEncoder
-
-	return zapcore.NewConsoleEncoder(encoderConfig)
-}
-
-// GetGlobalLogger returns the global logger instance.
-func GetGlobalLogger() Logger {
-	if globalLogger == nil {
-		globalLogger = NewBeautifulLogger("app")
-	}
-
-	return globalLogger
-}
-
-// SetGlobalLogger sets the global logger instance.
-func SetGlobalLogger(l Logger) {
-	if lg, ok := l.(*logger); ok {
-		globalLogger = lg
-	}
-}
-
-// Implementation of Logger interface for logger
-
-func (l *logger) Debug(msg string, fields ...Field) {
-	l.zap.Debug(msg, fieldsToZap(fields)...)
-}
-
-func (l *logger) Info(msg string, fields ...Field) {
-	l.zap.Info(msg, fieldsToZap(fields)...)
-}
-
-func (l *logger) Warn(msg string, fields ...Field) {
-	l.zap.Warn(msg, fieldsToZap(fields)...)
-}
-
-func (l *logger) Error(msg string, fields ...Field) {
-	l.zap.Error(msg, fieldsToZap(fields)...)
-}
-
-func (l *logger) Fatal(msg string, fields ...Field) {
-	l.zap.Fatal(msg, fieldsToZap(fields)...)
-}
-
-func (l *logger) Debugf(template string, args ...any) {
-	l.zap.Debug(fmt.Sprintf(template, args...))
-}
-
-func (l *logger) Infof(template string, args ...any) {
-	l.zap.Info(fmt.Sprintf(template, args...))
-}
-
-func (l *logger) Warnf(template string, args ...any) {
-	l.zap.Warn(fmt.Sprintf(template, args...))
-}
-
-func (l *logger) Errorf(template string, args ...any) {
-	l.zap.Error(fmt.Sprintf(template, args...))
-}
-
-func (l *logger) Fatalf(template string, args ...any) {
-	l.zap.Fatal(fmt.Sprintf(template, args...))
-}
-
-func (l *logger) With(fields ...Field) Logger {
-	return &logger{zap: l.zap.With(fieldsToZap(fields)...)}
-}
-
-func (l *logger) WithContext(ctx context.Context) Logger {
-	if ctx == nil {
-		return l
-	}
-
-	// Use the new context-aware field constructors
-	contextFields := ContextFields(ctx)
-	if len(contextFields) > 0 {
-		return &logger{zap: l.zap.With(fieldsToZap(contextFields)...)}
-	}
-
-	return l
-}
-
-func (l *logger) Named(name string) Logger {
-	return &logger{zap: l.zap.Named(name)}
-}
-
-func (l *logger) Sugar() SugarLogger {
-	return &sugarLogger{sugar: l.zap.Sugar()}
-}
-
-func (l *logger) Sync() error {
-	return l.zap.Sync()
-}
-
-// Implementation of Logger interface for noopLogger
-
-func (l *noopLogger) Debug(msg string, fields ...Field)      {}
-func (l *noopLogger) Info(msg string, fields ...Field)       {}
-func (l *noopLogger) Warn(msg string, fields ...Field)       {}
-func (l *noopLogger) Error(msg string, fields ...Field)      {}
-func (l *noopLogger) Fatal(msg string, fields ...Field)      {}
-func (l *noopLogger) Debugf(template string, args ...any)    {}
-func (l *noopLogger) Infof(template string, args ...any)     {}
-func (l *noopLogger) Warnf(template string, args ...any)     {}
-func (l *noopLogger) Errorf(template string, args ...any)    {}
-func (l *noopLogger) Fatalf(template string, args ...any)    {}
-func (l *noopLogger) With(fields ...Field) Logger            { return l }
-func (l *noopLogger) WithContext(ctx context.Context) Logger { return l }
-func (l *noopLogger) Named(name string) Logger               { return l }
-func (l *noopLogger) Sugar() SugarLogger                     { return &noopSugarLogger{} }
-func (l *noopLogger) Sync() error                            { return nil }
-
-// noopSugarLogger implements SugarLogger interface but does nothing.
-type noopSugarLogger struct{}
-
-func (s *noopSugarLogger) Debugw(msg string, keysAndValues ...any) {}
-func (s *noopSugarLogger) Infow(msg string, keysAndValues ...any)  {}
-func (s *noopSugarLogger) Warnw(msg string, keysAndValues ...any)  {}
-func (s *noopSugarLogger) Errorw(msg string, keysAndValues ...any) {}
-func (s *noopSugarLogger) Fatalw(msg string, keysAndValues ...any) {}
-func (s *noopSugarLogger) With(args ...any) SugarLogger            { return s }
-
-// TrackWithFields logs the execution time with additional fields.
-func TrackWithFields(ctx context.Context, name string, fields ...Field) func() {
-	start := time.Now()
-	logger := LoggerFromContext(ctx)
-
-	return func() {
-		duration := time.Since(start)
-		fields = append(fields,
-			String("function", name),
-			Duration("duration", duration),
-		)
-		logger.Debug("Function execution completed", fields...)
-	}
-}
-
-// LogPanicWithFields logs a panic with additional fields.
-func LogPanicWithFields(logger Logger, recovered any, fields ...Field) {
-	fields = append(fields,
-		Any("panic", recovered),
-		Stack("stacktrace"),
-	)
-	logger.Error("Panic recovered", fields...)
-}
-
-// HTTPRequestLogger creates a logger with HTTP request fields.
-func HTTPRequestLogger(logger Logger, method, path, userAgent string, status int) Logger {
-	group := HTTPRequestGroup(method, path, userAgent, status)
-
-	return logger.With(group.Fields()...)
-}
-
-// DatabaseQueryLogger creates a logger with database query fields.
-func DatabaseQueryLogger(logger Logger, query, table string, rows int64, duration time.Duration) Logger {
-	group := DatabaseQueryGroup(query, table, rows, duration)
-
-	return logger.With(group.Fields()...)
-}
-
-// ServiceLogger creates a logger with service information fields.
-func ServiceLogger(logger Logger, name, version, environment string) Logger {
-	group := ServiceInfoGroup(name, version, environment)
-
-	return logger.With(group.Fields()...)
-}
-
-// sugarLogger implements the SugarLogger interface.
-type sugarLogger struct {
-	sugar *zap.SugaredLogger
-}
-
-// Implementation of SugarLogger interface
-
-func (s *sugarLogger) Debugw(msg string, keysAndValues ...any) {
-	s.sugar.Debugw(msg, keysAndValues...)
-}
-
-func (s *sugarLogger) Infow(msg string, keysAndValues ...any) {
-	s.sugar.Infow(msg, keysAndValues...)
-}
-
-func (s *sugarLogger) Warnw(msg string, keysAndValues ...any) {
-	s.sugar.Warnw(msg, keysAndValues...)
-}
-
-func (s *sugarLogger) Errorw(msg string, keysAndValues ...any) {
-	s.sugar.Errorw(msg, keysAndValues...)
-}
-
-func (s *sugarLogger) Fatalw(msg string, keysAndValues ...any) {
-	s.sugar.Fatalw(msg, keysAndValues...)
-}
-
-func (s *sugarLogger) With(args ...any) SugarLogger {
-	return &sugarLogger{sugar: s.sugar.With(args...)}
-}
-
 // Context helper functions
 
 // WithLogger adds a logger to the context.
@@ -489,16 +24,21 @@ func WithLogger(ctx context.Context, logger Logger) context.Context {
 }
 
 // LoggerFromContext extracts a logger from the context.
+//
+// The global-logger fallback (GetGlobalLogger) was removed with the rest of
+// the zap-backed implementation in this task; a later task reintroduces a
+// default logger fallback. Until then this returns nil when no logger has
+// been attached to the context.
 func LoggerFromContext(ctx context.Context) Logger {
 	if ctx == nil {
-		return GetGlobalLogger()
+		return nil
 	}
 
 	if l, ok := ctx.Value(loggerKey).(Logger); ok {
 		return l
 	}
 
-	return GetGlobalLogger()
+	return nil
 }
 
 // WithRequestID adds a request ID to the context.
@@ -555,23 +95,6 @@ func UserIDFromContext(ctx context.Context) string {
 	return ""
 }
 
-// Utility functions
-
-// fieldsToZap converts Field interfaces to zap.Field.
-func fieldsToZap(fields []Field) []zap.Field {
-	zapFields := make([]zap.Field, len(fields))
-	for i, field := range fields {
-		zapFields[i] = field.ZapField()
-	}
-
-	return zapFields
-}
-
-// NewField creates a new field.
-func NewField(key string, value any) Field {
-	return &CustomField{key: key, value: value}
-}
-
 // Track logs the execution time of a function.
 func Track(ctx context.Context, name string) func() {
 	start := time.Now()
@@ -599,12 +122,36 @@ func TrackWithLogger(logger Logger, name string) func() {
 	}
 }
 
+// TrackWithFields logs the execution time with additional fields.
+func TrackWithFields(ctx context.Context, name string, fields ...Field) func() {
+	start := time.Now()
+	logger := LoggerFromContext(ctx)
+
+	return func() {
+		duration := time.Since(start)
+		fields = append(fields,
+			String("function", name),
+			Duration("duration", duration),
+		)
+		logger.Debug("Function execution completed", fields...)
+	}
+}
+
 // LogPanic logs a panic with stack trace.
 func LogPanic(logger Logger, recovered any) {
 	logger.Error("Panic recovered",
 		Any("panic", recovered),
 		Stack("stacktrace"),
 	)
+}
+
+// LogPanicWithFields logs a panic with additional fields.
+func LogPanicWithFields(logger Logger, recovered any, fields ...Field) {
+	fields = append(fields,
+		Any("panic", recovered),
+		Stack("stacktrace"),
+	)
+	logger.Error("Panic recovered", fields...)
 }
 
 // ConditionalLog logs only if condition is true.
@@ -718,4 +265,25 @@ func (lw *LoggingWriter) Write(p []byte) (n int, err error) {
 	}
 
 	return len(p), nil
+}
+
+// HTTPRequestLogger creates a logger with HTTP request fields.
+func HTTPRequestLogger(logger Logger, method, path, userAgent string, status int) Logger {
+	group := HTTPRequestGroup(method, path, userAgent, status)
+
+	return logger.With(group.Fields()...)
+}
+
+// DatabaseQueryLogger creates a logger with database query fields.
+func DatabaseQueryLogger(logger Logger, query, table string, rows int64, duration time.Duration) Logger {
+	group := DatabaseQueryGroup(query, table, rows, duration)
+
+	return logger.With(group.Fields()...)
+}
+
+// ServiceLogger creates a logger with service information fields.
+func ServiceLogger(logger Logger, name, version, environment string) Logger {
+	group := ServiceInfoGroup(name, version, environment)
+
+	return logger.With(group.Fields()...)
 }

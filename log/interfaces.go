@@ -2,8 +2,6 @@ package log
 
 import (
 	"context"
-
-	"go.uber.org/zap"
 )
 
 // Logger represents the logging interface.
@@ -43,14 +41,6 @@ type SugarLogger interface {
 	Fatalw(msg string, keysAndValues ...any)
 
 	With(args ...any) SugarLogger
-}
-
-// Field represents a structured log field.
-type Field interface {
-	Key() string
-	Value() any
-	// ZapField returns the underlying zap.Field for efficient conversion
-	ZapField() zap.Field
 }
 
 // LoggingConfig represents logging configuration.
