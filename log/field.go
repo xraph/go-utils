@@ -145,33 +145,54 @@ var (
 	}
 )
 
-// HTTP, database and service helpers.
+// The dotted key names below are the ones this library has always emitted.
+// They are part of the observable contract: dashboards, log queries and
+// alert rules match on these strings, and renaming one breaks them
+// silently, with no compile error anywhere. Do not "modernise" them.
 var (
-	HTTPMethod = func(method string) Field { return String("http_method", method) }
-	HTTPStatus = func(status int) Field { return Int("http_status", status) }
-	HTTPPath   = func(path string) Field { return String("http_path", path) }
+	HTTPMethod = func(method string) Field { return String("http.method", method) }
+	HTTPStatus = func(status int) Field { return Int("http.status", status) }
+	HTTPPath   = func(path string) Field { return String("http.path", path) }
 	HTTPURL    = func(u *url.URL) Field {
 		if u == nil {
-			return String("http_url", "")
+			return String("http.url", "")
 		}
-		return String("http_url", u.String())
+		return String("http.url", u.String())
 	}
-	HTTPUserAgent = func(userAgent string) Field { return String("http_user_agent", userAgent) }
+	HTTPUserAgent = func(userAgent string) Field { return String("http.user_agent", userAgent) }
 
-	DatabaseQuery = func(query string) Field { return String("db_query", query) }
-	DatabaseTable = func(table string) Field { return String("db_table", table) }
-	DatabaseRows  = func(rows int64) Field { return Int64("db_rows", rows) }
+	DatabaseQuery = func(query string) Field { return String("db.query", query) }
+	DatabaseTable = func(table string) Field { return String("db.table", table) }
+	DatabaseRows  = func(rows int64) Field { return Int64("db.rows", rows) }
 
-	ServiceName        = func(name string) Field { return String("service_name", name) }
-	ServiceVersion     = func(version string) Field { return String("service_version", version) }
-	ServiceEnvironment = func(env string) Field { return String("service_environment", env) }
+	ServiceName        = func(name string) Field { return String("service.name", name) }
+	ServiceVersion     = func(version string) Field { return String("service.version", version) }
+	ServiceEnvironment = func(env string) Field { return String("service.environment", env) }
 
-	LatencyMs   = func(latency time.Duration) Field { return Float64("latency_ms", float64(latency.Nanoseconds())/1e6) }
-	MemoryUsage = func(bytes int64) Field { return Int64("memory_bytes", bytes) }
+	LatencyMs   = func(latency time.Duration) Field { return Float64("latency.ms", float64(latency.Nanoseconds())/1e6) }
+	MemoryUsage = func(bytes int64) Field { return Int64("memory.usage", bytes) }
 
-	RequestID = func(ctx context.Context) Field { return String("request_id", RequestIDFromContext(ctx)) }
-	TraceID   = func(ctx context.Context) Field { return String("trace_id", TraceIDFromContext(ctx)) }
-	UserID    = func(ctx context.Context) Field { return String("user_id", UserIDFromContext(ctx)) }
+	RequestID = func(ctx context.Context) Field {
+		id := RequestIDFromContext(ctx)
+		if id == "" {
+			return Field{key: "request_id", typ: unknownType}
+		}
+		return String("request_id", id)
+	}
+	TraceID = func(ctx context.Context) Field {
+		id := TraceIDFromContext(ctx)
+		if id == "" {
+			return Field{key: "trace_id", typ: unknownType}
+		}
+		return String("trace_id", id)
+	}
+	UserID = func(ctx context.Context) Field {
+		id := UserIDFromContext(ctx)
+		if id == "" {
+			return Field{key: "user_id", typ: unknownType}
+		}
+		return String("user_id", id)
+	}
 
 	ContextFields = func(ctx context.Context) []Field {
 		fields := make([]Field, 0, 3)

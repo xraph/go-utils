@@ -1,6 +1,7 @@
 package log
 
 import (
+	"context"
 	"errors"
 	"math"
 	"testing"
@@ -87,5 +88,43 @@ func TestFieldDoesNotAllocateForScalars(t *testing.T) {
 	})
 	if got != 0 {
 		t.Errorf("scalar field construction allocated %.0f times, want 0", got)
+	}
+}
+
+func TestFieldKeysMatchTheHistoricalNames(t *testing.T) {
+	cases := map[string]Field{
+		"http.method":         HTTPMethod("GET"),
+		"http.status":         HTTPStatus(200),
+		"http.path":           HTTPPath("/v1"),
+		"http.user_agent":     HTTPUserAgent("curl"),
+		"db.query":            DatabaseQuery("SELECT 1"),
+		"db.table":            DatabaseTable("users"),
+		"db.rows":             DatabaseRows(3),
+		"service.name":        ServiceName("api"),
+		"service.version":     ServiceVersion("1.0"),
+		"service.environment": ServiceEnvironment("prod"),
+		"latency.ms":          LatencyMs(time.Second),
+		"memory.usage":        MemoryUsage(1024),
+	}
+	for want, f := range cases {
+		if got := f.Key(); got != want {
+			t.Errorf("key = %q, want %q", got, want)
+		}
+	}
+	if got := HTTPURL(nil).Key(); got != "http.url" {
+		t.Errorf("HTTPURL key = %q, want http.url", got)
+	}
+}
+
+func TestContextFieldHelpersSkipWhenAbsent(t *testing.T) {
+	ctx := context.Background()
+	for _, f := range []Field{RequestID(ctx), TraceID(ctx), UserID(ctx)} {
+		if f.typ != unknownType {
+			t.Errorf("%s on an empty context has typ %v, want unknownType", f.Key(), f.typ)
+		}
+	}
+	withID := WithRequestID(ctx, "req1")
+	if got := RequestID(withID).Value(); got != "req1" {
+		t.Errorf("RequestID value = %v, want req1", got)
 	}
 }
