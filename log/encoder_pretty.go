@@ -65,9 +65,13 @@ func newPrettyEncoder(color bool, width int) *prettyEncoder {
 	}
 
 	return &prettyEncoder{
-		color:     color,
-		width:     width,
-		nameWidth: minNameWidth,
+		color: color,
+		width: width,
+		// nameWidth starts at zero, not at minNameWidth: a logger with no name
+		// should not pay for a name column at all. It jumps straight to
+		// minNameWidth the first time a named entry arrives, and grows from
+		// there. Same treatment as callerWidth below.
+		nameWidth: 0,
 		msgWidth:  minMsgWidth,
 		scratch:   make([]byte, 0, 64),
 	}
@@ -91,7 +95,10 @@ func levelColor(l level) string {
 }
 
 func (p *prettyEncoder) paint(dst []byte, color, s string) []byte {
-	if !p.color {
+	// Painting an empty string emits a colour code and a reset around
+	// nothing, which is invisible noise in a terminal and pure bloat in
+	// a captured log.
+	if !p.color || s == "" {
 		return append(dst, s...)
 	}
 
@@ -119,8 +126,12 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 	defer p.mu.Unlock()
 
 	name := truncateLeft(e.name, maxNameWidth)
-	if n := len(name); n > p.nameWidth {
-		p.nameWidth = n
+	if name != "" {
+		n := max(len(name), minNameWidth)
+
+		if n > p.nameWidth {
+			p.nameWidth = n
+		}
 	}
 
 	if n := len(e.msg); n > p.msgWidth && n <= maxMsgWidth {
@@ -146,10 +157,16 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 	dst = appendPad(dst, levelWidth-len(lvl))
 	dst = append(dst, ' ')
 
-	// Logger name.
-	dst = p.paint(dst, ansiDim, name)
-	dst = appendPad(dst, p.nameWidth-len(name))
-	dst = append(dst, ' ')
+	// Logger name. Reserved only once some entry has actually carried one, so
+	// an unnamed logger does not waste a column of blanks on every line.
+	nameCol := 0
+
+	if p.nameWidth > 0 {
+		nameCol = p.nameWidth + 1
+		dst = p.paint(dst, ansiDim, name)
+		dst = appendPad(dst, p.nameWidth-len(name))
+		dst = append(dst, ' ')
+	}
 
 	// Caller sits between the name and the message and is an adaptive column
 	// like the name, not a variable-width prefix. It has to be, because the
@@ -176,7 +193,7 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 	}
 
 	// Message.
-	msgCol := timestampWidth + 2 + levelWidth + 1 + p.nameWidth + 1 + callerCol
+	msgCol := timestampWidth + 2 + levelWidth + 1 + nameCol + callerCol
 
 	dst = append(dst, e.msg...)
 	dst = appendPad(dst, p.msgWidth-len(e.msg))

@@ -307,3 +307,41 @@ func TestPrettyEncoderKeepsOversizedFieldsIntact(t *testing.T) {
 		t.Error("no line carried the error field")
 	}
 }
+
+// An unnamed logger should not pay for a name column. Before this, nameWidth
+// started at minNameWidth, so every line from a logger with no name carried a
+// dozen blanks plus an empty pair of ANSI codes.
+func TestPrettyEncoderOmitsTheNameColumnWhenUnnamed(t *testing.T) {
+	ts := time.Date(2026, 9, 5, 16, 25, 9, 962000000, time.UTC)
+
+	plain := string(newPrettyEncoder(false, 120).encode(nil,
+		entry{lvl: infoLevel, msg: "server listening", ts: ts}, []Field{String("addr", ":8080")}))
+
+	// Only the region before the message can betray a reserved name column;
+	// the message itself is padded to msgWidth to align trailing fields, so
+	// scanning the whole line would false-positive on that unrelated padding.
+	before, _, found := strings.Cut(plain, "server listening")
+	if !found {
+		t.Fatalf("message not found in output: %q", plain)
+	}
+
+	if strings.Contains(before, "     ") {
+		t.Errorf("unnamed logger still reserves a name column: %q", plain)
+	}
+
+	if got := strings.Index(plain, "server listening"); got > 22 {
+		t.Errorf("message starts at column %d, too far right for an unnamed logger: %q", got, plain)
+	}
+
+	coloured := string(newPrettyEncoder(true, 120).encode(nil,
+		entry{lvl: infoLevel, msg: "m", ts: ts}, nil))
+	if strings.Contains(coloured, "\033[90m\033[0m") {
+		t.Errorf("empty name painted with a bare colour/reset pair: %q", coloured)
+	}
+
+	named := string(newPrettyEncoder(false, 120).encode(nil,
+		entry{lvl: infoLevel, msg: "m", name: "api", ts: ts}, nil))
+	if !strings.Contains(named, "api") {
+		t.Errorf("named logger lost its name: %q", named)
+	}
+}
