@@ -25,8 +25,8 @@ func TestParseLevel(t *testing.T) {
 }
 
 func TestLevelOrdering(t *testing.T) {
-	if !(debugLevel < infoLevel && infoLevel < warnLevel &&
-		warnLevel < errorLevel && errorLevel < fatalLevel) {
+	if debugLevel >= infoLevel || infoLevel >= warnLevel ||
+		warnLevel >= errorLevel || errorLevel >= fatalLevel {
 		t.Fatal("levels must be strictly increasing in severity")
 	}
 }

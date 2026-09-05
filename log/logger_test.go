@@ -16,17 +16,22 @@ func newTestLoggerTo(buf *bytes.Buffer, lvl level) *logger {
 
 func decodeLines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	t.Helper()
+
 	var out []map[string]any
-	for _, ln := range strings.Split(strings.TrimRight(buf.String(), "\n"), "\n") {
+
+	for ln := range strings.SplitSeq(strings.TrimRight(buf.String(), "\n"), "\n") {
 		if ln == "" {
 			continue
 		}
+
 		var m map[string]any
 		if err := json.Unmarshal([]byte(ln), &m); err != nil {
 			t.Fatalf("bad line %q: %v", ln, err)
 		}
+
 		out = append(out, m)
 	}
+
 	return out
 }
 
@@ -34,10 +39,11 @@ func decodeLines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 // first-100-then-1-in-100, so 1,000 identical lines produced 109.
 func TestNoSamplingEveryLineIsWritten(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	const n = 1000
-	for i := 0; i < n; i++ {
+	for i := range n {
 		l.Info("repeated line", Int("i", i))
 	}
 
@@ -51,15 +57,18 @@ func TestNoSamplingEveryLineIsWritten(t *testing.T) {
 // SkipCallerPath and overshot into runtime internals, printing asm_arm64.s.
 func TestCallerPointsAtTheCallSite(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newLogger(infoLevel, &jsonEncoder{}, newSyncWriter(&buf), "", true)
 
 	l.Info("direct") // <- the caller must resolve to this file
 
 	lines := decodeLines(t, &buf)
+
 	caller, _ := lines[0]["caller"].(string)
 	if !strings.HasPrefix(caller, "log/logger_test.go:") {
 		t.Errorf("caller = %q, want a log/logger_test.go line", caller)
 	}
+
 	for _, bad := range []string{"asm_", "proc.go", "runtime"} {
 		if strings.Contains(caller, bad) {
 			t.Errorf("caller resolved into the runtime: %q", caller)
@@ -69,6 +78,7 @@ func TestCallerPointsAtTheCallSite(t *testing.T) {
 
 func TestCallerIsCorrectThroughWithAndNamed(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newLogger(infoLevel, &jsonEncoder{}, newSyncWriter(&buf), "", true)
 
 	l.With(String("k", "v")).Info("through With")
@@ -84,6 +94,7 @@ func TestCallerIsCorrectThroughWithAndNamed(t *testing.T) {
 
 func TestCallerIsCorrectThroughFVariantsAndSugar(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newLogger(infoLevel, &jsonEncoder{}, newSyncWriter(&buf), "", true)
 
 	l.Infof("through Infof %d", 1)
@@ -99,6 +110,7 @@ func TestCallerIsCorrectThroughFVariantsAndSugar(t *testing.T) {
 
 func TestLevelFiltering(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, warnLevel)
 
 	l.Debug("no")
@@ -110,6 +122,7 @@ func TestLevelFiltering(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2", len(lines))
 	}
+
 	if lines[0]["level"] != "WARN" || lines[1]["level"] != "ERROR" {
 		t.Errorf("wrong lines survived: %v", lines)
 	}
@@ -117,16 +130,19 @@ func TestLevelFiltering(t *testing.T) {
 
 func TestWithAccumulatesFieldsInOrder(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	l.With(String("a", "1")).With(String("b", "2")).Info("msg", String("c", "3"))
 
 	line := buf.String()
+
 	ai, bi, ci := strings.Index(line, `"a"`), strings.Index(line, `"b"`), strings.Index(line, `"c"`)
 	if ai < 0 || bi < 0 || ci < 0 {
 		t.Fatalf("missing fields in %q", line)
 	}
-	if !(ai < bi && bi < ci) {
+
+	if ai >= bi || bi >= ci {
 		t.Errorf("fields out of order in %q", line)
 	}
 }
@@ -134,6 +150,7 @@ func TestWithAccumulatesFieldsInOrder(t *testing.T) {
 // With() must copy, not share, or two children corrupt each other.
 func TestWithDoesNotAliasParentFields(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	base := l.With(String("base", "yes"))
@@ -147,9 +164,11 @@ func TestWithDoesNotAliasParentFields(t *testing.T) {
 	if _, leaked := lines[0]["b"]; leaked {
 		t.Error("childA saw childB's field")
 	}
+
 	if _, leaked := lines[1]["a"]; leaked {
 		t.Error("childB saw childA's field")
 	}
+
 	for i := range lines {
 		if lines[i]["base"] != "yes" {
 			t.Errorf("line %d lost the parent field", i)
@@ -159,6 +178,7 @@ func TestWithDoesNotAliasParentFields(t *testing.T) {
 
 func TestNamedComposesWithDots(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newLogger(infoLevel, &jsonEncoder{}, newSyncWriter(&buf), "forge", false)
 
 	l.Named("http").Named("router").Info("msg")
@@ -170,6 +190,7 @@ func TestNamedComposesWithDots(t *testing.T) {
 
 func TestWithContextPullsIDs(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	ctx := WithUserID(WithTraceID(WithRequestID(context.Background(), "req1"), "trace1"), "user1")
@@ -185,17 +206,22 @@ func TestWithContextPullsIDs(t *testing.T) {
 
 func TestConcurrentLoggingProducesWholeLines(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	const n = 100
+
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+
+	for i := range n {
 		go func(i int) {
 			defer wg.Done()
+
 			l.Info("concurrent", Int("i", i), String("pad", strings.Repeat("x", 200)))
 		}(i)
 	}
+
 	wg.Wait()
 
 	if got := len(decodeLines(t, &buf)); got != n {
@@ -205,6 +231,7 @@ func TestConcurrentLoggingProducesWholeLines(t *testing.T) {
 
 func TestDisabledLevelDoesNotAllocate(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	got := testing.AllocsPerRun(200, func() {
@@ -222,6 +249,7 @@ func TestDisabledLevelDoesNotAllocate(t *testing.T) {
 // fields with the call's fields must not allocate per line.
 func TestWithLoggerDoesNotAllocatePerLine(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel).With(
 		String("service", "api"), String("version", "1.2.3"))
 
@@ -237,6 +265,7 @@ func TestWithLoggerDoesNotAllocatePerLine(t *testing.T) {
 
 func TestSetLevelAtRuntime(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	l.Debug("hidden")
@@ -251,6 +280,7 @@ func TestSetLevelAtRuntime(t *testing.T) {
 
 func TestSugarLogger(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	l.Sugar().Infow("sugar", "k", "v", "n", 1)
@@ -263,6 +293,7 @@ func TestSugarLogger(t *testing.T) {
 
 func TestSugarWithOddArgsDoesNotPanic(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	l.Sugar().Infow("odd", "k", "v", "dangling")
@@ -274,16 +305,20 @@ func TestSugarWithOddArgsDoesNotPanic(t *testing.T) {
 
 func TestTimestampIsPopulated(t *testing.T) {
 	var buf bytes.Buffer
+
 	l := newTestLoggerTo(&buf, infoLevel)
 
 	before := time.Now().Add(-time.Second)
+
 	l.Info("msg")
 
 	ts, _ := decodeLines(t, &buf)[0]["ts"].(string)
+
 	parsed, err := time.Parse(time.RFC3339Nano, ts)
 	if err != nil {
 		t.Fatalf("ts %q is not RFC3339Nano: %v", ts, err)
 	}
+
 	if parsed.Before(before) {
 		t.Errorf("ts %v is implausibly old", parsed)
 	}

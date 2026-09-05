@@ -2,6 +2,7 @@ package log
 
 import (
 	"io"
+	"os"
 	"sync"
 )
 
@@ -30,9 +31,22 @@ func (s *syncWriter) Sync() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// syncWriter never buffers; every Write already reached the underlying
+	// writer's own Write, so there is nothing for stdout/stderr to flush.
+	// fsync-ing them fails with a platform-specific, meaningless error the
+	// moment they are not a real terminal, which is the common case in
+	// production (piped through a container log driver, redirected to a
+	// file, captured by CI) and in `go test` output capture. Skip the call
+	// for those two rather than surface an error that does not reflect any
+	// lost data.
+	if s.w == os.Stdout || s.w == os.Stderr {
+		return nil
+	}
+
 	if sy, ok := s.w.(interface{ Sync() error }); ok {
 		return sy.Sync()
 	}
+
 	if fl, ok := s.w.(interface{ Flush() error }); ok {
 		return fl.Flush()
 	}

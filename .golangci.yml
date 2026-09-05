@@ -204,8 +204,12 @@ linters:
       - linters:
           - staticcheck
         text: "SA9003:"
-      # Exclude gosec G115 (integer overflow) for zap field type conversions in log/fields.go
-      - path: log/fields\.go
+      # Exclude gosec G115 (integer overflow) for Field's int64<->uint64/float64
+      # bit-pattern round trips. These aren't value-narrowing conversions, they
+      # reinterpret the same 64 bits so Field can store any scalar type in one
+      # int64 without boxing. log/fields.go was split into log/field.go (the
+      # storage side) and the per-format encoders during the logger rewrite.
+      - path: log/(field|encoder_json|encoder_pretty)\.go
         linters:
           - gosec
         text: "G115:"

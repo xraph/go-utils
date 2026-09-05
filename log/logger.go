@@ -64,6 +64,7 @@ func trimPath(file string) string {
 	if idx < 0 {
 		return file
 	}
+
 	prev := strings.LastIndexByte(file[:idx], '/')
 	if prev < 0 {
 		return file
@@ -115,6 +116,7 @@ func (l *logger) Debug(msg string, fields ...Field) {
 	if !l.enabled(debugLevel) {
 		return
 	}
+
 	l.log(debugLevel, msg, fields, callerSkip)
 }
 
@@ -122,6 +124,7 @@ func (l *logger) Info(msg string, fields ...Field) {
 	if !l.enabled(infoLevel) {
 		return
 	}
+
 	l.log(infoLevel, msg, fields, callerSkip)
 }
 
@@ -129,6 +132,7 @@ func (l *logger) Warn(msg string, fields ...Field) {
 	if !l.enabled(warnLevel) {
 		return
 	}
+
 	l.log(warnLevel, msg, fields, callerSkip)
 }
 
@@ -136,6 +140,7 @@ func (l *logger) Error(msg string, fields ...Field) {
 	if !l.enabled(errorLevel) {
 		return
 	}
+
 	l.log(errorLevel, msg, fields, callerSkip)
 }
 
@@ -143,7 +148,9 @@ func (l *logger) Fatal(msg string, fields ...Field) {
 	if l.enabled(fatalLevel) {
 		l.log(fatalLevel, msg, fields, callerSkip)
 	}
+
 	_ = l.out.Sync()
+
 	os.Exit(1)
 }
 
@@ -151,6 +158,7 @@ func (l *logger) Debugf(t string, a ...any) {
 	if !l.enabled(debugLevel) {
 		return
 	}
+
 	l.log(debugLevel, fmt.Sprintf(t, a...), nil, callerSkip)
 }
 
@@ -158,6 +166,7 @@ func (l *logger) Infof(t string, a ...any) {
 	if !l.enabled(infoLevel) {
 		return
 	}
+
 	l.log(infoLevel, fmt.Sprintf(t, a...), nil, callerSkip)
 }
 
@@ -165,6 +174,7 @@ func (l *logger) Warnf(t string, a ...any) {
 	if !l.enabled(warnLevel) {
 		return
 	}
+
 	l.log(warnLevel, fmt.Sprintf(t, a...), nil, callerSkip)
 }
 
@@ -172,6 +182,7 @@ func (l *logger) Errorf(t string, a ...any) {
 	if !l.enabled(errorLevel) {
 		return
 	}
+
 	l.log(errorLevel, fmt.Sprintf(t, a...), nil, callerSkip)
 }
 
@@ -179,7 +190,9 @@ func (l *logger) Fatalf(t string, a ...any) {
 	if l.enabled(fatalLevel) {
 		l.log(fatalLevel, fmt.Sprintf(t, a...), nil, callerSkip)
 	}
+
 	_ = l.out.Sync()
+
 	os.Exit(1)
 }
 
@@ -196,6 +209,7 @@ func (l *logger) With(fields ...Field) Logger {
 	if len(fields) == 0 {
 		return l
 	}
+
 	c := l.clone()
 	c.fields = append(c.fields, fields...)
 
@@ -206,10 +220,12 @@ func (l *logger) WithContext(ctx context.Context) Logger {
 	if ctx == nil {
 		return l
 	}
+
 	cf := ContextFields(ctx)
 	if len(cf) == 0 {
 		return l
 	}
+
 	c := l.clone()
 	c.fields = append(c.fields, cf...)
 
@@ -244,6 +260,7 @@ func keysAndValuesToFields(kv ...any) []Field {
 		if !ok {
 			key = fmt.Sprintf("%v", kv[i])
 		}
+
 		fields = append(fields, Any(key, kv[i+1]))
 	}
 	// An odd trailing argument is dropped rather than panicking.
@@ -255,6 +272,7 @@ func (s *sugarLogger) with(kv []any) []Field {
 	if len(s.args) == 0 {
 		return f
 	}
+
 	out := make([]Field, 0, len(s.args)+len(f))
 	out = append(out, s.args...)
 
@@ -289,7 +307,9 @@ func (s *sugarLogger) Fatalw(msg string, kv ...any) {
 	if s.l.enabled(fatalLevel) {
 		s.l.log(fatalLevel, msg, s.with(kv), callerSkip)
 	}
+
 	_ = s.l.out.Sync()
+
 	os.Exit(1)
 }
 

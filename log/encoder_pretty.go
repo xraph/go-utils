@@ -63,6 +63,7 @@ func newPrettyEncoder(color bool, width int) *prettyEncoder {
 	if width <= 0 {
 		width = 120
 	}
+
 	return &prettyEncoder{
 		color:     color,
 		width:     width,
@@ -93,6 +94,7 @@ func (p *prettyEncoder) paint(dst []byte, color, s string) []byte {
 	if !p.color {
 		return append(dst, s...)
 	}
+
 	dst = append(dst, color...)
 	dst = append(dst, s...)
 
@@ -105,6 +107,7 @@ func (p *prettyEncoder) paintBytes(dst []byte, color string, b []byte) []byte {
 	if !p.color {
 		return append(dst, b...)
 	}
+
 	dst = append(dst, color...)
 	dst = append(dst, b...)
 
@@ -119,6 +122,7 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 	if n := len(name); n > p.nameWidth {
 		p.nameWidth = n
 	}
+
 	if n := len(e.msg); n > p.msgWidth && n <= maxMsgWidth {
 		p.msgWidth = n
 	}
@@ -128,10 +132,12 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 	if p.color {
 		dst = append(dst, ansiDim...)
 	}
+
 	dst = e.ts.AppendFormat(dst, timestampLayout)
 	if p.color {
 		dst = append(dst, ansiReset...)
 	}
+
 	dst = append(dst, ' ', ' ')
 
 	// Level, padded to a fixed width so the following columns line up.
@@ -171,11 +177,13 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 
 	// Message.
 	msgCol := timestampWidth + 2 + levelWidth + 1 + p.nameWidth + 1 + callerCol
+
 	dst = append(dst, e.msg...)
 	dst = appendPad(dst, p.msgWidth-len(e.msg))
 
 	// Fields, wrapping to the message column when the line runs long.
 	col := msgCol + max(len(e.msg), p.msgWidth)
+
 	for i := range fields {
 		f := &fields[i]
 		if f.typ == unknownType {
@@ -197,6 +205,7 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 			dst = append(dst, ' ')
 			col++
 		}
+
 		dst = p.paintBytes(dst, ansiDim, p.scratch)
 		col += kvLen
 	}
@@ -226,9 +235,11 @@ func appendPrettyValue(dst []byte, f *Field) []byte {
 		if err == nil {
 			return append(dst, "null"...)
 		}
+
 		return append(dst, err.Error()...)
 	case stringsType:
 		vals, _ := f.iface.([]string)
+
 		return append(dst, strings.Join(vals, ",")...)
 	default:
 		return append(dst, formatAny(f.Value())...)
@@ -239,6 +250,7 @@ func appendPad(dst []byte, n int) []byte {
 	for ; n > 0; n-- {
 		dst = append(dst, ' ')
 	}
+
 	return dst
 }
 
@@ -250,5 +262,6 @@ func truncateLeft(s string, limit int) string {
 	if len(s) <= limit || limit < 4 {
 		return s
 	}
+
 	return "..." + s[len(s)-(limit-3):]
 }

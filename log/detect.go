@@ -41,12 +41,14 @@ func resolveMode(envFormat string, isTTY, underTest, testV bool) mode {
 		if testV {
 			return modePretty
 		}
+
 		return modeNoop
 	}
 
 	if isTTY {
 		return modePretty
 	}
+
 	return modeJSON
 }
 
@@ -56,9 +58,11 @@ func resolveColor(m mode, isTTY, noColor bool, termVar string) bool {
 	if m != modePretty {
 		return false
 	}
+
 	if noColor || termVar == "dumb" {
 		return false
 	}
+
 	return isTTY
 }
 
@@ -69,7 +73,8 @@ func isTerminal(w io.Writer) bool {
 	if !ok {
 		return false
 	}
-	return term.IsTerminal(int(f.Fd()))
+
+	return term.IsTerminal(int(f.Fd())) //nolint:gosec // G115: fds are small, non-negative; term.IsTerminal needs an int
 }
 
 // underTest reports whether this binary was built by `go test`. It checks for
@@ -86,6 +91,7 @@ func testVerbose() bool {
 	if f == nil {
 		return false
 	}
+
 	return f.Value.String() == "true"
 }
 
@@ -95,6 +101,7 @@ func envFormat() string {
 	if v := os.Getenv("FORGE_LOG_FORMAT"); v != "" {
 		return v
 	}
+
 	return os.Getenv("LOG_FORMAT")
 }
 

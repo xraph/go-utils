@@ -27,6 +27,7 @@ const initialBufSize = 512
 var bufPool = sync.Pool{
 	New: func() any {
 		b := make([]byte, 0, initialBufSize)
+
 		return &b
 	},
 }
@@ -42,6 +43,7 @@ func putBuf(b *[]byte) {
 	if cap(*b) > maxRetained {
 		return
 	}
+
 	*b = (*b)[:0]
 	bufPool.Put(b)
 }

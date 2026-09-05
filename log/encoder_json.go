@@ -28,6 +28,7 @@ func (j *jsonEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 		dst = append(dst, `,"logger":`...)
 		dst = appendJSONString(dst, e.name)
 	}
+
 	if e.caller != "" {
 		dst = append(dst, `,"caller":`...)
 		dst = appendJSONString(dst, e.caller)
@@ -41,6 +42,7 @@ func (j *jsonEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 		if f.typ == unknownType {
 			continue
 		}
+
 		dst = append(dst, ',')
 		dst = appendJSONString(dst, f.key)
 		dst = append(dst, ':')
@@ -68,6 +70,7 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 		if v != v || v > 1.7976931348623157e308 || v < -1.7976931348623157e308 {
 			return appendJSONString(dst, strconv.FormatFloat(v, 'g', -1, 64))
 		}
+
 		return strconv.AppendFloat(dst, v, 'g', -1, 64)
 	case boolType:
 		return strconv.AppendBool(dst, f.num == 1)
@@ -76,22 +79,28 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 	case timeType:
 		dst = append(dst, '"')
 		dst = time.Unix(0, f.num).UTC().AppendFormat(dst, time.RFC3339Nano)
+
 		return append(dst, '"')
 	case errorType:
 		err, _ := f.iface.(error)
 		if err == nil {
 			return append(dst, "null"...)
 		}
+
 		return appendJSONString(dst, err.Error())
 	case stringsType:
 		vals, _ := f.iface.([]string)
+
 		dst = append(dst, '[')
+
 		for i, v := range vals {
 			if i > 0 {
 				dst = append(dst, ',')
 			}
+
 			dst = appendJSONString(dst, v)
 		}
+
 		return append(dst, ']')
 	default:
 		// stringerType, anyType, lazyType and anything else fall back to the
@@ -103,6 +112,7 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 // appendJSONString writes a correctly escaped JSON string, quotes included.
 func appendJSONString(dst []byte, s string) []byte {
 	dst = append(dst, '"')
+
 	for i := 0; i < len(s); {
 		c := s[i]
 		if c < utf8.RuneSelf {
@@ -125,15 +135,20 @@ func appendJSONString(dst []byte, s string) []byte {
 					dst = append(dst, c)
 				}
 			}
+
 			i++
+
 			continue
 		}
+
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if r == utf8.RuneError && size == 1 {
 			dst = append(dst, `�`...)
 			i++
+
 			continue
 		}
+
 		dst = append(dst, s[i:i+size]...)
 		i += size
 	}

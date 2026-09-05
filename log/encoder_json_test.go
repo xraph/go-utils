@@ -41,18 +41,23 @@ func TestJSONEncoderProducesParseableJSON(t *testing.T) {
 	if got["level"] != "INFO" {
 		t.Errorf("level = %v, want INFO", got["level"])
 	}
+
 	if got["msg"] != "request completed" {
 		t.Errorf("msg = %v, want request completed", got["msg"])
 	}
+
 	if got["logger"] != "forge.http" {
 		t.Errorf("logger = %v, want forge.http", got["logger"])
 	}
+
 	if got["method"] != "GET" {
 		t.Errorf("method = %v, want GET", got["method"])
 	}
+
 	if got["status"] != float64(200) {
 		t.Errorf("status = %v, want 200", got["status"])
 	}
+
 	if got["error"] != "boom" {
 		t.Errorf("error = %v, want boom", got["error"])
 	}
@@ -69,8 +74,9 @@ func TestJSONEncoderEndsWithNewline(t *testing.T) {
 // iterated it, so the same call produced a different order every time.
 func TestFieldOrderIsDeterministic(t *testing.T) {
 	enc := &jsonEncoder{}
+
 	first := string(enc.encode(nil, testEntry(), testFields()))
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		got := string(enc.encode(nil, testEntry(), testFields()))
 		if got != first {
 			t.Fatalf("encoding is not deterministic\niteration %d: %s\nfirst:       %s", i, got, first)
@@ -86,13 +92,16 @@ func TestJSONEncoderEscapesControlCharacters(t *testing.T) {
 	if strings.Count(string(out), "\n") != 1 {
 		t.Errorf("a raw newline leaked into the JSON line: %q", out)
 	}
+
 	var got map[string]any
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("escaping produced invalid JSON: %v\n%s", err, out)
 	}
+
 	if got["msg"] != e.msg {
 		t.Errorf("msg round trip = %q, want %q", got["msg"], e.msg)
 	}
+
 	if got["k"] != "a\"b\nc" {
 		t.Errorf("field round trip = %q", got["k"])
 	}
@@ -100,10 +109,12 @@ func TestJSONEncoderEscapesControlCharacters(t *testing.T) {
 
 func TestJSONEncoderHandlesNilError(t *testing.T) {
 	out := (&jsonEncoder{}).encode(nil, testEntry(), []Field{Error(nil)})
+
 	var got map[string]any
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("nil error produced invalid JSON: %v\n%s", err, out)
 	}
+
 	if got["error"] != nil {
 		t.Errorf("error = %v, want null", got["error"])
 	}
@@ -111,10 +122,12 @@ func TestJSONEncoderHandlesNilError(t *testing.T) {
 
 func TestJSONEncoderEvaluatesLazyFields(t *testing.T) {
 	out := (&jsonEncoder{}).encode(nil, testEntry(), []Field{Lazy("k", func() any { return "late" })})
+
 	var got map[string]any
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatal(err)
 	}
+
 	if got["k"] != "late" {
 		t.Errorf("lazy field = %v, want late", got["k"])
 	}

@@ -16,20 +16,26 @@ var update = flag.Bool("update", false, "rewrite golden files")
 
 func checkGolden(t *testing.T, name string, got []byte) {
 	t.Helper()
+
 	path := filepath.Join("testdata", name)
+
 	if *update {
 		if err := os.MkdirAll("testdata", 0o755); err != nil {
 			t.Fatal(err)
 		}
+
 		if err := os.WriteFile(path, got, 0o644); err != nil {
 			t.Fatal(err)
 		}
+
 		return
 	}
+
 	want, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("missing golden file %s (run: go test ./log/ -update): %v", path, err)
 	}
+
 	if string(got) != string(want) {
 		t.Errorf("output does not match %s\n--- got ---\n%s\n--- want ---\n%s", path, got, want)
 	}
@@ -40,6 +46,7 @@ func prettyLines(enc *prettyEncoder, entries []entry, fields [][]Field) []byte {
 	for i := range entries {
 		out = enc.encode(out, entries[i], fields[i])
 	}
+
 	return out
 }
 
@@ -89,6 +96,7 @@ func TestPrettyEncoderWrapsLongFieldSets(t *testing.T) {
 		if !strings.HasPrefix(ln, " ") {
 			t.Errorf("continuation line %d is not indented: %q", i+1, ln)
 		}
+
 		if strings.Contains(ln, "15:04:07") {
 			t.Errorf("continuation line %d repeats the timestamp: %q", i+1, ln)
 		}
@@ -104,6 +112,7 @@ func TestPrettyEncoderColumnsGrowAndNeverShrink(t *testing.T) {
 
 	_ = enc.encode(nil, long, nil)
 	afterLong := enc.nameWidth
+
 	_ = enc.encode(nil, short, nil)
 	if enc.nameWidth < afterLong {
 		t.Errorf("name column shrank from %d to %d", afterLong, enc.nameWidth)
@@ -117,9 +126,11 @@ func TestPrettyEncoderTruncatesLongNamesFromTheLeft(t *testing.T) {
 	if len(got) != 20 {
 		t.Errorf("truncateLeft returned %d chars, want 20: %q", len(got), got)
 	}
+
 	if !strings.HasSuffix(got, "dispatcher") {
 		t.Errorf("truncation must keep the specific end, got %q", got)
 	}
+
 	if !strings.HasPrefix(got, "...") {
 		t.Errorf("truncation must be marked with a leading ellipsis, got %q", got)
 	}
@@ -127,6 +138,7 @@ func TestPrettyEncoderTruncatesLongNamesFromTheLeft(t *testing.T) {
 	if got := truncateLeft("forge.http", 20); got != "forge.http" {
 		t.Errorf("short name was modified: %q", got)
 	}
+
 	_ = enc
 }
 
@@ -153,13 +165,15 @@ func TestPrettyEncoderIsSafeForConcurrentUse(t *testing.T) {
 	enc := newPrettyEncoder(false, 120)
 
 	const goroutines = 50
+
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 	results := make([][]byte, goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(i int) {
 			defer wg.Done()
+
 			e := entry{
 				lvl:  infoLevel,
 				msg:  "concurrent",
@@ -172,6 +186,7 @@ func TestPrettyEncoderIsSafeForConcurrentUse(t *testing.T) {
 			})
 		}(i)
 	}
+
 	wg.Wait()
 
 	for i, got := range results {
@@ -179,6 +194,7 @@ func TestPrettyEncoderIsSafeForConcurrentUse(t *testing.T) {
 		if !strings.Contains(line, fmt.Sprintf("worker=w%02d", i)) {
 			t.Errorf("goroutine %d lost or corrupted its field: %q", i, line)
 		}
+
 		if strings.Count(line, "\n") != 1 {
 			t.Errorf("goroutine %d produced %d lines, want 1: %q", i, strings.Count(line, "\n"), line)
 		}
@@ -219,6 +235,7 @@ func TestPrettyEncoderAlignsWrapsUnderCaller(t *testing.T) {
 	}
 
 	got := string(enc.encode(nil, e, f))
+
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
 	if len(lines) < 2 {
 		t.Fatalf("expected wrapping, got %d line(s):\n%s", len(lines), got)
@@ -228,6 +245,7 @@ func TestPrettyEncoderAlignsWrapsUnderCaller(t *testing.T) {
 	if msgCol < 0 {
 		t.Fatalf("message not found in %q", lines[0])
 	}
+
 	for i, ln := range lines[1:] {
 		indent := len(ln) - len(strings.TrimLeft(ln, " "))
 		if indent != msgCol {
@@ -271,16 +289,20 @@ func TestPrettyEncoderKeepsOversizedFieldsIntact(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+
 	var found bool
+
 	for _, ln := range lines {
 		trimmed := strings.TrimLeft(ln, " ")
 		if strings.HasPrefix(trimmed, "error=") {
 			found = true
+
 			if trimmed != "error="+long {
 				t.Errorf("the oversized field shares its line with other content: %q", trimmed)
 			}
 		}
 	}
+
 	if !found {
 		t.Error("no line carried the error field")
 	}

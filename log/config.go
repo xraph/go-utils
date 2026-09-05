@@ -56,6 +56,7 @@ func New(cfg Config) Logger {
 	tty := isTerminal(out)
 
 	var m mode
+
 	switch format {
 	case FormatPretty:
 		m = modePretty
@@ -70,11 +71,13 @@ func New(cfg Config) Logger {
 	}
 
 	var enc encoder
+
 	if m == modePretty {
 		color := resolveColor(m, tty, noColorSet(), os.Getenv("TERM"))
 		if cfg.Color != nil {
 			color = *cfg.Color
 		}
+
 		enc = newPrettyEncoder(color, terminalWidth(out))
 	} else {
 		enc = &jsonEncoder{}
@@ -90,7 +93,8 @@ func terminalWidth(w io.Writer) int {
 	if !ok {
 		return 120
 	}
-	width, _, err := term.GetSize(int(f.Fd()))
+
+	width, _, err := term.GetSize(int(f.Fd())) //nolint:gosec // G115: fds are small, non-negative; term.GetSize needs an int
 	if err != nil || width <= 0 {
 		return 120
 	}
@@ -102,6 +106,7 @@ func terminalWidth(w io.Writer) int {
 // entry point every existing forge call site uses.
 func NewLogger(cfg LoggingConfig) Logger {
 	format := FormatAuto
+
 	switch cfg.Format {
 	case "json":
 		format = FormatJSON
@@ -110,6 +115,7 @@ func NewLogger(cfg LoggingConfig) Logger {
 	}
 
 	var out io.Writer
+
 	switch cfg.Output {
 	case "stdout":
 		out = os.Stdout
@@ -146,14 +152,18 @@ var (
 // package does not flood the test output.
 func GetGlobalLogger() Logger {
 	globalMu.RLock()
+
 	l := globalLogger
+
 	globalMu.RUnlock()
+
 	if l != nil {
 		return l
 	}
 
 	globalMu.Lock()
 	defer globalMu.Unlock()
+
 	if globalLogger == nil {
 		globalLogger = New(Config{Name: "app"})
 	}
@@ -167,6 +177,7 @@ func SetGlobalLogger(l Logger) {
 	if l == nil {
 		return
 	}
+
 	globalMu.Lock()
 	globalLogger = l
 	globalMu.Unlock()

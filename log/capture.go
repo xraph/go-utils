@@ -94,6 +94,7 @@ func (tl *TestLogger) WithContext(ctx context.Context) Logger {
 	if ctx == nil {
 		return tl
 	}
+
 	c := tl.clone()
 	c.fields = append(c.fields, ContextFields(ctx)...)
 
@@ -129,6 +130,7 @@ func (tl *TestLogger) GetLogs() []LogEntry {
 // GetLogsByLevel returns the captured entries at one level.
 func (tl *TestLogger) GetLogsByLevel(level string) []LogEntry {
 	var out []LogEntry
+
 	for _, e := range tl.GetLogs() {
 		if e.Level == level {
 			out = append(out, e)
@@ -160,6 +162,7 @@ func (tl *TestLogger) AssertHasLog(level, message string) bool {
 // CountLogs returns how many entries were captured at one level.
 func (tl *TestLogger) CountLogs(level string) int {
 	n := 0
+
 	for _, e := range tl.GetLogs() {
 		if e.Level == level {
 			n++
@@ -179,6 +182,7 @@ func (s *testSugarLogger) merge(kv []any) []Field {
 	if len(s.args) == 0 {
 		return f
 	}
+
 	out := make([]Field, 0, len(s.args)+len(f))
 	out = append(out, s.args...)
 

@@ -88,11 +88,13 @@ func TestIsTerminalOnNonTerminal(t *testing.T) {
 	if isTerminal(&bytes.Buffer{}) {
 		t.Error("a bytes.Buffer is not a terminal")
 	}
+
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer devnull.Close()
+
 	if isTerminal(devnull) {
 		t.Error("/dev/null is not a terminal")
 	}

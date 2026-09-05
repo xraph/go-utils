@@ -32,6 +32,7 @@ func TestFieldValueRoundTrip(t *testing.T) {
 			if got := c.f.Value(); got != c.want {
 				t.Errorf("Value() = %#v, want %#v", got, c.want)
 			}
+
 			if c.f.Key() == "" {
 				t.Error("Key() must not be empty")
 			}
@@ -58,14 +59,18 @@ func TestLazyFieldEvaluatesOnRead(t *testing.T) {
 	calls := 0
 	f := Lazy("k", func() any {
 		calls++
+
 		return "computed"
 	})
+
 	if calls != 0 {
 		t.Fatalf("Lazy must not evaluate at construction, got %d calls", calls)
 	}
+
 	if got := f.Value(); got != "computed" {
 		t.Errorf("Value() = %v, want computed", got)
 	}
+
 	if calls != 1 {
 		t.Errorf("evaluated %d times, want 1", calls)
 	}
@@ -111,6 +116,7 @@ func TestFieldKeysMatchTheHistoricalNames(t *testing.T) {
 			t.Errorf("key = %q, want %q", got, want)
 		}
 	}
+
 	if got := HTTPURL(nil).Key(); got != "http.url" {
 		t.Errorf("HTTPURL key = %q, want http.url", got)
 	}
@@ -123,6 +129,7 @@ func TestContextFieldHelpersSkipWhenAbsent(t *testing.T) {
 			t.Errorf("%s on an empty context has typ %v, want unknownType", f.Key(), f.typ)
 		}
 	}
+
 	withID := WithRequestID(ctx, "req1")
 	if got := RequestID(withID).Value(); got != "req1" {
 		t.Errorf("RequestID value = %v, want req1", got)

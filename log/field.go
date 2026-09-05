@@ -62,6 +62,7 @@ func (f Field) Value() any {
 		if fn, ok := f.iface.(func() any); ok {
 			return fn()
 		}
+
 		return nil
 	default:
 		return f.iface
@@ -93,6 +94,7 @@ var (
 		if val {
 			n = 1
 		}
+
 		return Field{key: key, typ: boolType, num: n}
 	}
 	Time = func(key string, val time.Time) Field {
@@ -128,6 +130,7 @@ var (
 	Stack = func(key string) Field {
 		buf := make([]byte, 4096)
 		n := runtime.Stack(buf, false)
+
 		return String(key, string(buf[:n]))
 	}
 
@@ -135,12 +138,14 @@ var (
 		if !condition {
 			return Field{key: key, typ: unknownType}
 		}
+
 		return Any(key, value)
 	}
 	Nullable = func(key string, value any) Field {
 		if value == nil {
 			return String(key, "null")
 		}
+
 		return Any(key, value)
 	}
 )
@@ -157,6 +162,7 @@ var (
 		if u == nil {
 			return String("http.url", "")
 		}
+
 		return String("http.url", u.String())
 	}
 	HTTPUserAgent = func(userAgent string) Field { return String("http.user_agent", userAgent) }
@@ -177,6 +183,7 @@ var (
 		if id == "" {
 			return Field{key: "request_id", typ: unknownType}
 		}
+
 		return String("request_id", id)
 	}
 	TraceID = func(ctx context.Context) Field {
@@ -184,6 +191,7 @@ var (
 		if id == "" {
 			return Field{key: "trace_id", typ: unknownType}
 		}
+
 		return String("trace_id", id)
 	}
 	UserID = func(ctx context.Context) Field {
@@ -191,6 +199,7 @@ var (
 		if id == "" {
 			return Field{key: "user_id", typ: unknownType}
 		}
+
 		return String("user_id", id)
 	}
 
@@ -199,12 +208,15 @@ var (
 		if id := RequestIDFromContext(ctx); id != "" {
 			fields = append(fields, String("request_id", id))
 		}
+
 		if id := TraceIDFromContext(ctx); id != "" {
 			fields = append(fields, String("trace_id", id))
 		}
+
 		if id := UserIDFromContext(ctx); id != "" {
 			fields = append(fields, String("user_id", id))
 		}
+
 		return fields
 	}
 )
