@@ -53,9 +53,10 @@ type prettyEncoder struct {
 	color bool
 	width int
 
-	nameWidth int
-	msgWidth  int
-	scratch   []byte // reused per field; guarded by mu
+	nameWidth   int
+	callerWidth int
+	msgWidth    int
+	scratch     []byte // reused per field; guarded by mu
 }
 
 func newPrettyEncoder(color bool, width int) *prettyEncoder {
@@ -144,14 +145,32 @@ func (p *prettyEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 	dst = appendPad(dst, p.nameWidth-len(name))
 	dst = append(dst, ' ')
 
-	// Caller, when present, sits between the name and the message.
+	// Caller sits between the name and the message and is an adaptive column
+	// like the name, not a variable-width prefix. It has to be, because the
+	// continuation lines of a wrapped field set hang-indent to the message
+	// column: if the caller's width were not reserved, those lines would indent
+	// to the wrong place and the wrap arithmetic would undercount, letting lines
+	// run past the configured width.
+	//
+	// Once any line has carried a caller, the column stays reserved for every
+	// later line, so a logger that sets callers on some lines and not others
+	// still aligns.
 	if e.caller != "" {
+		if n := len(e.caller); n > p.callerWidth {
+			p.callerWidth = n
+		}
+	}
+
+	callerCol := 0
+	if p.callerWidth > 0 {
+		callerCol = p.callerWidth + 1
 		dst = p.paint(dst, ansiDim, e.caller)
+		dst = appendPad(dst, p.callerWidth-len(e.caller))
 		dst = append(dst, ' ')
 	}
 
 	// Message.
-	msgCol := timestampWidth + 2 + levelWidth + 1 + p.nameWidth + 1
+	msgCol := timestampWidth + 2 + levelWidth + 1 + p.nameWidth + 1 + callerCol
 	dst = append(dst, e.msg...)
 	dst = appendPad(dst, p.msgWidth-len(e.msg))
 

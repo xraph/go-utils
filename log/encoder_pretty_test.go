@@ -196,3 +196,92 @@ func TestPrettyEncoderNeverDropsFields(t *testing.T) {
 		t.Errorf("field was dropped from the output: %q", got)
 	}
 }
+
+// The caller column has to be reserved in msgCol, or wrapped continuation
+// lines hang-indent to the wrong column and the wrap check undercounts.
+func TestPrettyEncoderAlignsWrapsUnderCaller(t *testing.T) {
+	ts := time.Date(2026, 9, 5, 15, 4, 7, 1000000, time.UTC)
+	enc := newPrettyEncoder(false, 100)
+
+	e := entry{
+		lvl:    errorLevel,
+		msg:    "request failed",
+		name:   "forge.http",
+		caller: "http/handler.go:42",
+		ts:     ts,
+	}
+	f := []Field{
+		String("method", "POST"),
+		String("path", "/v1/orders"),
+		Int("status", 500),
+		Duration("latency", 1200*time.Millisecond),
+		Error(errors.New("connection refused")),
+	}
+
+	got := string(enc.encode(nil, e, f))
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected wrapping, got %d line(s):\n%s", len(lines), got)
+	}
+
+	msgCol := strings.Index(lines[0], "request failed")
+	if msgCol < 0 {
+		t.Fatalf("message not found in %q", lines[0])
+	}
+	for i, ln := range lines[1:] {
+		indent := len(ln) - len(strings.TrimLeft(ln, " "))
+		if indent != msgCol {
+			t.Errorf("continuation %d indents to %d, want %d (the message column)\n%s",
+				i+1, indent, msgCol, got)
+		}
+	}
+
+	for i, ln := range lines {
+		if len(ln) > 100 {
+			t.Errorf("line %d is %d chars, over the 100 width:\n%s", i, len(ln), ln)
+		}
+	}
+}
+
+// A single field wider than the remaining budget cannot be wrapped, because
+// the encoder never splits one field's key=value across lines. That is
+// deliberate: a soft-wrapped error string or stack trace is still readable
+// and still copy-pasteable, while a truncated or hyphenated one has lost
+// data. So such a line is allowed to exceed the width, and what must hold
+// is that the value survives intact and gets a line to itself.
+func TestPrettyEncoderKeepsOversizedFieldsIntact(t *testing.T) {
+	ts := time.Date(2026, 9, 5, 15, 4, 7, 1000000, time.UTC)
+	enc := newPrettyEncoder(false, 100)
+
+	long := "dial tcp 10.0.0.4:5432: connect: connection refused after 3 retries over 30s"
+	e := entry{
+		lvl:    errorLevel,
+		msg:    "request failed",
+		name:   "forge.http",
+		caller: "http/handler.go:42",
+		ts:     ts,
+	}
+	got := string(enc.encode(nil, e, []Field{
+		String("method", "POST"),
+		Error(errors.New(long)),
+	}))
+
+	if !strings.Contains(got, long) {
+		t.Errorf("the oversized value was truncated or mangled:\n%s", got)
+	}
+
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	var found bool
+	for _, ln := range lines {
+		trimmed := strings.TrimLeft(ln, " ")
+		if strings.HasPrefix(trimmed, "error=") {
+			found = true
+			if trimmed != "error="+long {
+				t.Errorf("the oversized field shares its line with other content: %q", trimmed)
+			}
+		}
+	}
+	if !found {
+		t.Error("no line carried the error field")
+	}
+}
