@@ -49,8 +49,25 @@ func NewTestLogger() Logger {
 
 func (tl *TestLogger) add(level, msg string, fields []Field) {
 	all := make([]Field, 0, len(tl.fields)+len(fields))
-	all = append(all, tl.fields...)
-	all = append(all, fields...)
+
+	// Conditional(false, ...) and the RequestID/TraceID/UserID helpers on an
+	// empty context produce unknownType fields as a way of saying "omit this
+	// key". Both encoders skip unknownType when rendering, so the capture
+	// path has to skip it too: otherwise LogEntry.Field("request_id") returns
+	// (nil, true) here while production output omits the key entirely, and a
+	// test asserting "no request_id when there is none" passes against
+	// TestLogger and fails against real output (or the reverse).
+	for _, f := range tl.fields {
+		if f.typ != unknownType {
+			all = append(all, f)
+		}
+	}
+
+	for _, f := range fields {
+		if f.typ != unknownType {
+			all = append(all, f)
+		}
+	}
 
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()

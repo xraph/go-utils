@@ -35,6 +35,34 @@ func TestCaptureLoggerRecordsFields(t *testing.T) {
 	}
 }
 
+// Regression test: Conditional(false, ...) and the context field helpers on
+// an empty context produce unknownType fields, which both encoders skip when
+// rendering. The capture path used to store them anyway, so
+// LogEntry.Field("hidden") returned (nil, true) here while real output
+// omitted the key entirely.
+func TestCaptureLoggerOmitsUnknownTypeFields(t *testing.T) {
+	l := NewTestLogger().(*TestLogger)
+
+	l.Info("request", Conditional(false, "hidden", 1), RequestID(context.Background()))
+
+	logs := l.GetLogs()
+	if len(logs) != 1 {
+		t.Fatalf("got %d entries, want 1", len(logs))
+	}
+
+	if _, ok := logs[0].Field("hidden"); ok {
+		t.Error("Field(hidden) reported present for a false Conditional")
+	}
+
+	if _, ok := logs[0].Field("request_id"); ok {
+		t.Error("Field(request_id) reported present with no request ID in context")
+	}
+
+	if len(logs[0].Fields) != 0 {
+		t.Errorf("captured %d fields, want 0: %+v", len(logs[0].Fields), logs[0].Fields)
+	}
+}
+
 // The old With() returned the receiver and dropped the fields entirely.
 func TestCaptureLoggerWithRetainsFields(t *testing.T) {
 	l := NewTestLogger().(*TestLogger)
