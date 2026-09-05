@@ -25,8 +25,11 @@ func TestResolveMode(t *testing.T) {
 		{"garbage env falls through to tty", "yaml", true, false, false, modePretty},
 		{"garbage env falls through to pipe", "yaml", false, false, false, modeJSON},
 
-		// Under test: silent by default, pretty when -v is passed.
+		// Under test: silent by default, pretty when -v is passed. The
+		// tty-without-v row matters: it is the only case that catches a
+		// rewrite which checks isTTY before checking underTest.
 		{"go test is silent", "", false, true, false, modeNoop},
+		{"go test on a tty without -v is still silent", "", true, true, false, modeNoop},
 		{"go test -v is pretty", "", false, true, true, modePretty},
 		{"go test -v on a tty is pretty", "", true, true, true, modePretty},
 
