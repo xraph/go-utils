@@ -141,3 +141,18 @@ func TestCaptureLoggerHelpers(t *testing.T) {
 		t.Errorf("Clear left %d entries", got)
 	}
 }
+
+// Finding 3 again, for the capture logger specifically. This assertion
+// lives here rather than in the config task's file so that each commit's
+// test binary compiles on its own.
+func TestSetGlobalLoggerAcceptsTheCaptureLogger(t *testing.T) {
+	original := GetGlobalLogger()
+	t.Cleanup(func() { SetGlobalLogger(original) })
+
+	want := NewTestLogger()
+	SetGlobalLogger(want)
+
+	if got := GetGlobalLogger(); got != want {
+		t.Errorf("SetGlobalLogger(%T) then GetGlobalLogger() returned %T, want the same value", want, got)
+	}
+}

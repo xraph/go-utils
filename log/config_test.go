@@ -97,10 +97,14 @@ func TestSetGlobalLoggerAcceptsEveryImplementation(t *testing.T) {
 	t.Cleanup(func() { SetGlobalLogger(original) })
 
 	var buf bytes.Buffer
+	// NewTestLogger deliberately is not in this list: it arrives in the next
+	// task, and referencing it here would make this commit's test binary
+	// uncompilable on its own, breaking git bisect inside the branch. The
+	// capture logger gets its own SetGlobalLogger assertion alongside it.
 	candidates := []Logger{
 		NewNoopLogger(),
-		NewTestLogger(),
 		New(Config{Format: FormatJSON, Output: &buf}),
+		New(Config{Format: FormatPretty, Output: &buf}),
 	}
 
 	for _, want := range candidates {
