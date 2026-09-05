@@ -230,6 +230,8 @@ func TestConcurrentLoggingProducesWholeLines(t *testing.T) {
 }
 
 func TestDisabledLevelDoesNotAllocate(t *testing.T) {
+	skipUnderRace(t)
+
 	var buf bytes.Buffer
 
 	l := newTestLoggerTo(&buf, infoLevel)
@@ -248,6 +250,8 @@ func TestDisabledLevelDoesNotAllocate(t *testing.T) {
 // A logger built with With() is the common pattern, so the merge of its own
 // fields with the call's fields must not allocate per line.
 func TestWithLoggerDoesNotAllocatePerLine(t *testing.T) {
+	skipUnderRace(t)
+
 	var buf bytes.Buffer
 
 	l := newTestLoggerTo(&buf, infoLevel).With(

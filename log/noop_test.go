@@ -50,6 +50,8 @@ func TestNoopSugarLoggerIsUsable(t *testing.T) {
 }
 
 func TestNoopLoggerDoesNotAllocate(t *testing.T) {
+	skipUnderRace(t)
+
 	// This is the reason noop is a distinct type rather than "a logger with a
 	// very high level": empty method bodies inline, and the variadic slice
 	// does not escape.

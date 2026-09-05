@@ -83,6 +83,8 @@ func TestErrorFieldKeyIsError(t *testing.T) {
 }
 
 func TestFieldDoesNotAllocateForScalars(t *testing.T) {
+	skipUnderRace(t)
+
 	// The whole point of the struct: scalar fields never touch the any slot,
 	// so building one must not allocate.
 	got := testing.AllocsPerRun(100, func() {

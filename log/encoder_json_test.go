@@ -143,6 +143,8 @@ func TestJSONEncoderSkipsUnknownFields(t *testing.T) {
 }
 
 func TestJSONEncodeAllocationBudget(t *testing.T) {
+	skipUnderRace(t)
+
 	enc := &jsonEncoder{}
 	e := testEntry()
 	f := testFields()
