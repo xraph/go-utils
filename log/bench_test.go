@@ -41,6 +41,34 @@ func BenchmarkPrettyEncoder(b *testing.B) {
 	}
 }
 
+// BenchmarkJSONEncoderWithCaller and BenchmarkPrettyEncoderWithCaller measure
+// the configuration forge actually runs: NewLogger hardcodes AddCaller: true,
+// but the benchmarks above build loggers with New(Config{...}) and never set
+// it. Without these, the recorded headline numbers describe a path no forge
+// caller takes. This is measurement only; the caller path itself is not
+// optimised here.
+func BenchmarkJSONEncoderWithCaller(b *testing.B) {
+	l := New(Config{Format: FormatJSON, Output: io.Discard, Level: LevelInfo, AddCaller: true})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		l.Info("request completed", benchFields()...)
+	}
+}
+
+func BenchmarkPrettyEncoderWithCaller(b *testing.B) {
+	l := New(Config{Format: FormatPretty, Output: io.Discard, Level: LevelInfo, AddCaller: true})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for range b.N {
+		l.Info("request completed", benchFields()...)
+	}
+}
+
 func BenchmarkDisabledDebug(b *testing.B) {
 	l := New(Config{Format: FormatJSON, Output: io.Discard, Level: LevelInfo})
 
