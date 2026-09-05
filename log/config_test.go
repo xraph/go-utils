@@ -97,6 +97,17 @@ func TestLoggingConfigStillWorks(t *testing.T) {
 	l.Debug("debug is enabled")
 }
 
+// NewLogger falls back to stderr when the configured path cannot be opened,
+// rather than returning a logger that panics on first use.
+func TestNewLoggerFallsBackToStderrOnUnopenablePath(t *testing.T) {
+	l := NewLogger(LoggingConfig{Level: "info", Output: "/nonexistent-dir-xyz/app.log"})
+	if l == nil {
+		t.Fatal("NewLogger returned nil for an unopenable path")
+	}
+
+	l.Info("must not panic")
+}
+
 // Regression test for finding 3. SetGlobalLogger type-asserted to the
 // unexported *logger and silently discarded everything else.
 func TestSetGlobalLoggerAcceptsEveryImplementation(t *testing.T) {
