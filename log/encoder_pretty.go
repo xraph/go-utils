@@ -257,7 +257,7 @@ func appendPrettyValue(dst []byte, f *Field) []byte {
 			return append(dst, "null"...)
 		}
 
-		return append(dst, err.Error()...)
+		return append(dst, safeErrorString(err)...)
 	case stringsType:
 		vals, _ := f.iface.([]string)
 

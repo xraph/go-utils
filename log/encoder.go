@@ -48,9 +48,18 @@ func putBuf(b *[]byte) {
 	bufPool.Put(b)
 }
 
-// formatAny renders an arbitrary value for output. It is deliberately not
-// reflection-heavy; the tagged types never reach it.
-func formatAny(v any) string {
+// formatAny renders an arbitrary value for output. A String() or Error()
+// method can panic on a nil receiver or bad state, and a logging call must
+// never take down the caller, so the panic is caught and rendered instead.
+// Both things this replaced did the same: zapcore wrapped these in a
+// recover, and fmt's %v prints %!v(PANIC=...).
+func formatAny(v any) (s string) {
+	defer func() {
+		if r := recover(); r != nil {
+			s = fmt.Sprintf("%%!v(PANIC=%v)", r)
+		}
+	}()
+
 	switch t := v.(type) {
 	case nil:
 		return "null"
@@ -63,4 +72,19 @@ func formatAny(v any) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// safeErrorString calls err.Error(), recovering if the method panics on a
+// nil receiver or bad internal state. Used wherever an errorType field is
+// rendered directly instead of through formatAny, so the same guarantee
+// applies: a bad Error() implementation degrades the log line, it does not
+// take down the caller.
+func safeErrorString(err error) (s string) {
+	defer func() {
+		if r := recover(); r != nil {
+			s = fmt.Sprintf("%%!v(PANIC=%v)", r)
+		}
+	}()
+
+	return err.Error()
 }

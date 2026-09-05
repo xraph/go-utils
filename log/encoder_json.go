@@ -93,7 +93,7 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 			return append(dst, "null"...)
 		}
 
-		return appendJSONString(dst, err.Error())
+		return appendJSONString(dst, safeErrorString(err))
 	case stringsType:
 		vals, _ := f.iface.([]string)
 
