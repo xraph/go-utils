@@ -22,21 +22,16 @@ func WithLogger(ctx context.Context, logger Logger) context.Context {
 }
 
 // LoggerFromContext extracts a logger from the context.
-//
-// The global-logger fallback (GetGlobalLogger) was removed with the rest of
-// the zap-backed implementation in this task; a later task reintroduces a
-// default logger fallback. Until then this returns nil when no logger has
-// been attached to the context.
 func LoggerFromContext(ctx context.Context) Logger {
 	if ctx == nil {
-		return nil
+		return GetGlobalLogger()
 	}
 
 	if l, ok := ctx.Value(loggerKey).(Logger); ok {
 		return l
 	}
 
-	return nil
+	return GetGlobalLogger()
 }
 
 // WithRequestID adds a request ID to the context.

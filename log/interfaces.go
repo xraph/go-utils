@@ -42,11 +42,3 @@ type SugarLogger interface {
 
 	With(args ...any) SugarLogger
 }
-
-// LoggingConfig represents logging configuration.
-type LoggingConfig struct {
-	Level       LogLevel `env:"LOG_LEVEL"   mapstructure:"level"       yaml:"level"`
-	Format      string   `env:"LOG_FORMAT"  mapstructure:"format"      yaml:"format"`
-	Environment string   `env:"ENVIRONMENT" mapstructure:"environment" yaml:"environment"`
-	Output      string   `env:"LOG_OUTPUT"  mapstructure:"output"      yaml:"output"`
-}
