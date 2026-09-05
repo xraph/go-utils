@@ -1,6 +1,7 @@
 package log
 
 import (
+	"math"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -14,8 +15,14 @@ func (j *jsonEncoder) encode(dst []byte, e entry, fields []Field) []byte {
 	dst = append(dst, `"level":`...)
 	dst = appendJSONString(dst, e.lvl.String())
 
-	dst = append(dst, `,"ts":`...)
-	dst = appendJSONString(dst, e.ts.Format(time.RFC3339Nano))
+	// AppendFormat writes straight into dst. e.ts.Format(...) would build a
+	// throwaway string on every single log line, which is the most expensive
+	// allocation in the encoder because it fires unconditionally. RFC3339Nano
+	// only ever emits digits, '-', ':', '.', 'T', 'Z' and '+', none of which
+	// need JSON escaping, so the quotes can go on by hand.
+	dst = append(dst, `,"ts":"`...)
+	dst = e.ts.AppendFormat(dst, time.RFC3339Nano)
+	dst = append(dst, '"')
 
 	if e.name != "" {
 		dst = append(dst, `,"logger":`...)
@@ -54,7 +61,9 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 	case uint64Type:
 		return strconv.AppendUint(dst, uint64(f.num), 10)
 	case float64Type:
-		v := f.Value().(float64)
+		// Read the bits directly. f.Value() would box the float into an any and
+		// immediately unbox it, costing an allocation per float field.
+		v := math.Float64frombits(uint64(f.num))
 		// JSON has no NaN or Inf, so those become strings.
 		if v != v || v > 1.7976931348623157e308 || v < -1.7976931348623157e308 {
 			return appendJSONString(dst, strconv.FormatFloat(v, 'g', -1, 64))
@@ -65,7 +74,9 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 	case durationType:
 		return appendJSONString(dst, time.Duration(f.num).String())
 	case timeType:
-		return appendJSONString(dst, time.Unix(0, f.num).UTC().Format(time.RFC3339Nano))
+		dst = append(dst, '"')
+		dst = time.Unix(0, f.num).UTC().AppendFormat(dst, time.RFC3339Nano)
+		return append(dst, '"')
 	case errorType:
 		err, _ := f.iface.(error)
 		if err == nil {

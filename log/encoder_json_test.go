@@ -128,3 +128,24 @@ func TestJSONEncoderSkipsUnknownFields(t *testing.T) {
 		t.Errorf("a skipped field leaked into the output: %s", out)
 	}
 }
+
+func TestJSONEncodeAllocationBudget(t *testing.T) {
+	enc := &jsonEncoder{}
+	e := testEntry()
+	f := testFields()
+	buf := make([]byte, 0, 1024)
+
+	got := testing.AllocsPerRun(200, func() {
+		_ = enc.encode(buf[:0], e, f)
+	})
+	if got > 0 {
+		t.Errorf("encode allocated %.0f times per call, want 0", got)
+	}
+
+	bare := testing.AllocsPerRun(200, func() {
+		_ = enc.encode(buf[:0], e, nil)
+	})
+	if bare > 0 {
+		t.Errorf("encode with no fields allocated %.0f times per call, want 0", bare)
+	}
+}
