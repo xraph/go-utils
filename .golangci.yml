@@ -204,8 +204,27 @@ linters:
       - linters:
           - staticcheck
         text: "SA9003:"
-      # Exclude gosec G115 (integer overflow) for zap field type conversions in log/fields.go
-      - path: log/fields\.go
+      # Exclude gosec G115 (integer overflow) for Field's int64<->uint64/float64
+      # bit-pattern round trips. These aren't value-narrowing conversions, they
+      # reinterpret the same 64 bits so Field can store any scalar type in one
+      # int64 without boxing. log/fields.go was split into log/field.go (the
+      # storage side) and the per-format encoders during the logger rewrite.
+      - path: log/(field|encoder_json|encoder_pretty)\.go
+        linters:
+          - gosec
+        text: "G115:"
+      # Exclude gosec G115 for the two uintptr->int file-descriptor conversions
+      # that term.GetSize and term.IsTerminal require. An fd is a small
+      # non-negative int on every platform we build for, so there is no
+      # meaningful overflow to guard against.
+      #
+      # This lives here rather than as an inline //nolint because golangci-lint
+      # versions disagree about whether G115 applies to uintptr->int at all:
+      # 2.10.x reports it, 2.12.x does not. An inline directive therefore fails
+      # one version or the other -- unused (nolintlint) on 2.12, or missing
+      # (gosec) on 2.10. A config exclusion that matches nothing is only a
+      # warning, so this is correct under both.
+      - path: log/(config|detect)\.go
         linters:
           - gosec
         text: "G115:"
