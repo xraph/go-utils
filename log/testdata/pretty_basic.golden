@@ -1,0 +1,4 @@
+15:04:05.123  INFO  forge.http server listening         addr=:8080 tls=false
+15:04:05.412  DEBUG forge.db   acquired connection      pool=primary idle=9 open=1
+15:04:06.902  WARN  forge.cache eviction rate above target rate=0.42 target=0.2
+15:04:07.019  ERROR forge.http  request failed             method=POST path=/v1/orders status=500
