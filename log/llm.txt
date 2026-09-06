@@ -81,9 +81,18 @@ const (
 
 ```go
 // Create loggers
-func NewLogger(config LoggerConfig) Logger
-func NewBeautifulLogger(opts ...BeautifulLoggerOption) Logger
-func NewTestLogger() *TestLogger
+func New(cfg Config) Logger            // full construction surface
+func NewLogger(cfg LoggingConfig) Logger // config-file / env facing
+func NewNoopLogger() Logger
+func NewTestLogger() Logger            // capture logger, assert on .GetLogs()
+
+// Deprecated, kept working. All return the Logger interface.
+func NewBeautifulLogger(name string) Logger
+func NewBeautifulLoggerCompact(name string) Logger
+func NewBeautifulLoggerMinimal(name string) Logger
+func NewBeautifulLoggerJSON(name string) Logger
+func NewDevelopmentLogger() Logger
+func NewProductionLogger() Logger
 
 // Field constructors
 func String(key, value string) Field
@@ -170,24 +179,31 @@ requestLogger.Info("Request completed")
 // Output includes request_id and user_id in both logs
 ```
 
-### Beautiful Console Logger
+### Console output, chosen automatically
+
+There is no separate "beautiful" logger to construct. One implementation picks
+its own format: a terminal gets aligned coloured columns, anything else gets
+JSON. FORGE_LOG_FORMAT (or LOG_FORMAT) set to "pretty" or "json" overrides
+both. Inside a `go test` binary it resolves to a noop so suites stay quiet,
+and `go test -v` brings the output back.
 
 ```go
-// For development - beautiful colored output
-log := log.NewBeautifulLogger(
-    log.WithColors(true),
-    log.WithTimestamp(true),
-    log.WithCaller(true),
-)
+l := log.New(log.Config{Name: "forge.http", Level: log.LevelDebug})
 
-log.Info("Server started", log.Int("port", 8080))
-// Output: [INFO] 2025-01-01 12:00:00 | Server started port=8080
+l.Info("server listening", log.String("addr", ":8080"), log.Bool("tls", false))
+l.Warn("eviction rate above target", log.Float64("rate", 0.42))
+l.Error("request failed", log.Int("status", 500), log.Error(err))
 
-log.Warn("High memory usage", log.Int("mb", 1024))
-// Output: [WARN] 2025-01-01 12:00:00 | High memory usage mb=1024 (yellow)
+// On a terminal, columns align and long field sets hang-indent:
+// 15:04:05.123  INFO  forge.http   server listening   addr=:8080 tls=false
+// 15:04:06.884  WARN  forge.http   eviction rate ...  rate=0.42
+//
+// Piped, redirected, or in a container, the same calls emit one JSON object
+// per line:
+// {"level":"INFO","ts":"...","logger":"forge.http","msg":"server listening",...}
 
-log.Error("Database connection failed", log.Error(err))
-// Output: [ERROR] 2025-01-01 12:00:00 | Database connection failed error=... (red)
+// Colour follows the terminal too, and honours NO_COLOR and TERM=dumb.
+// Force either way with Config.Format: log.FormatPretty / log.FormatJSON.
 ```
 
 ### Named Loggers
