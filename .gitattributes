@@ -1,0 +1,11 @@
+# Golden files are byte-exact fixtures: the tests compare the encoder's output
+# against them literally, so a line-ending conversion on checkout turns every
+# golden test red on Windows with a diff that looks identical when printed,
+# because the only difference is an invisible carriage return.
+#
+# eol=lf (rather than -text) keeps them checked out as LF on every platform
+# while still letting git diff them as text when a golden legitimately changes.
+*.golden text eol=lf
+
+# Go source is LF by convention and gofmt assumes it.
+*.go text eol=lf

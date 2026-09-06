@@ -36,9 +36,22 @@ func checkGolden(t *testing.T, name string, got []byte) {
 		t.Fatalf("missing golden file %s (run: go test ./log/ -update): %v", path, err)
 	}
 
-	if string(got) != string(want) {
+	// Compare line endings out of the picture. .gitattributes pins these files
+	// to LF, but a working copy cloned before that was added still holds CRLF
+	// on Windows, and the resulting failure is maddening: the got and want
+	// blocks print identically because the only difference is a carriage
+	// return. What these fixtures pin is the rendered layout -- column
+	// positions, padding, wrapping -- and the platform's line-ending
+	// convention is not part of that contract.
+	if normaliseEOL(got) != normaliseEOL(want) {
 		t.Errorf("output does not match %s\n--- got ---\n%s\n--- want ---\n%s", path, got, want)
 	}
+}
+
+// normaliseEOL strips carriage returns so a CRLF checkout compares equal to the
+// LF output the encoder produces.
+func normaliseEOL(b []byte) string {
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }
 
 func prettyLines(enc *prettyEncoder, entries []entry, fields [][]Field) []byte {
