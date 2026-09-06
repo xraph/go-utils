@@ -239,7 +239,7 @@ deps-update:
 security:
 	@echo "$(COLOR_GREEN)Running security scan...$(COLOR_RESET)"
 	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -exclude=G115 -exclude-dir=vendor ./... && \
+		gosec -exclude-dir=vendor ./... && \
 		echo "$(COLOR_GREEN)✓ Security scan completed$(COLOR_RESET)"; \
 	else \
 		echo "$(COLOR_YELLOW)Warning: gosec not found. Run 'make install-tools' to install$(COLOR_RESET)"; \

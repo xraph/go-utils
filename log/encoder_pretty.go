@@ -237,9 +237,11 @@ func appendPrettyValue(dst []byte, f *Field) []byte {
 	case int64Type:
 		return strconv.AppendInt(dst, f.num, 10)
 	case uint64Type:
+		// #nosec G115 -- reinterpreting the same 64 bits, not narrowing.
 		return strconv.AppendUint(dst, uint64(f.num), 10)
 	case float64Type:
 		// Read the bits directly; f.Value() would box and immediately unbox.
+		// #nosec G115 -- reinterpreting the same 64 bits, not narrowing.
 		return strconv.AppendFloat(dst, math.Float64frombits(uint64(f.num)), 'g', -1, 64)
 	case boolType:
 		return strconv.AppendBool(dst, f.num == 1)

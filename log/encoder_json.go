@@ -61,10 +61,12 @@ func appendJSONValue(dst []byte, f *Field) []byte {
 	case int64Type:
 		return strconv.AppendInt(dst, f.num, 10)
 	case uint64Type:
+		// #nosec G115 -- reinterpreting the same 64 bits, not narrowing.
 		return strconv.AppendUint(dst, uint64(f.num), 10)
 	case float64Type:
 		// Read the bits directly. f.Value() would box the float into an any and
 		// immediately unbox it, costing an allocation per float field.
+		// #nosec G115 -- reinterpreting the same 64 bits, not narrowing.
 		v := math.Float64frombits(uint64(f.num))
 		// JSON has no NaN or Inf, so those become strings.
 		if v != v || v > 1.7976931348623157e308 || v < -1.7976931348623157e308 {

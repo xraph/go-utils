@@ -94,6 +94,8 @@ func terminalWidth(w io.Writer) int {
 		return 120
 	}
 
+	// #nosec G115 -- a file descriptor is a small non-negative int on every
+	// platform we build for; term.GetSize requires an int.
 	width, _, err := term.GetSize(int(f.Fd()))
 	if err != nil || width <= 0 {
 		return 120

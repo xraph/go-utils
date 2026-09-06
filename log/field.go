@@ -50,8 +50,12 @@ func (f Field) Value() any {
 	case int64Type:
 		return f.num
 	case uint64Type:
+		// #nosec G115 -- reinterpreting the same 64 bits, not narrowing. Uint64
+		// stores its value in num verbatim; this reads it back.
 		return uint64(f.num)
 	case float64Type:
+		// #nosec G115 -- reinterpreting the same 64 bits, not narrowing. Float64
+		// stores math.Float64bits in num; this is the inverse.
 		return math.Float64frombits(uint64(f.num))
 	case boolType:
 		return f.num == 1

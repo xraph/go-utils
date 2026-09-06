@@ -74,6 +74,8 @@ func isTerminal(w io.Writer) bool {
 		return false
 	}
 
+	// #nosec G115 -- a file descriptor is a small non-negative int on every
+	// platform we build for; term.IsTerminal requires an int.
 	return term.IsTerminal(int(f.Fd()))
 }
 
