@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/xraph/go-utils/compare/v1.2.2...v1.3.0) (2026-09-06)
+
+### Features
+
+* **log:** rewrite the logger with automatic format selection ([d7271db](https://github.com/xraph/go-utils/commit/d7271dbce09fb3102f57d1e7f5cb5b3ee19285a2)), closes [#6](https://github.com/xraph/go-utils/issues/6)
+
 ## [1.2.2](https://github.com/xraph/go-utils/compare/v1.2.1...v1.2.2) (2026-09-02)
 
 ### Performance Improvements
