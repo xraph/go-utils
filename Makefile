@@ -33,7 +33,24 @@ TEST_DIRS := $(shell go list ./... 2>/dev/null)
 LINT_DIRS := ./...
 
 # Tools
-GOLANGCI_LINT := golangci-lint
+#
+# GOLANGCI_LINT_VERSION is pinned and must stay in step with the version CI
+# runs. A mismatch is not cosmetic: linter releases disagree about which issues
+# exist at all. golangci-lint 2.10 reports G115 on the uintptr->int file
+# descriptor conversions in log/config.go and log/detect.go; 2.12 does not. An
+# unpinned local linter therefore passes while CI fails, or the reverse, and the
+# .golangci.yml exclusions get tuned against whichever version happens to be on
+# the developer's PATH.
+#
+# Note the module path is the /v2 one. The v1 path still resolves (to v1.64.x)
+# and installs a binary that cannot read this repository's version: "2" config
+# at all.
+GOLANGCI_LINT_VERSION := v2.12.2
+TOOLS_BIN := $(CURDIR)/.tools/bin
+
+# Version-suffixed so that bumping GOLANGCI_LINT_VERSION forces a reinstall
+# rather than silently reusing the old binary.
+GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
 # Colors for output
 COLOR_RESET := \033[0m
@@ -124,22 +141,29 @@ bench-compare:
 # Linting and formatting
 # ==============================================================================
 
+# Installs the pinned linter on first use. Because the target is the binary
+# itself, this runs once and is then skipped, and it deliberately ignores any
+# golangci-lint already on PATH so that `make lint` means the same thing on
+# every machine and in CI.
+$(GOLANGCI_LINT):
+	@echo "$(COLOR_GREEN)Installing golangci-lint $(GOLANGCI_LINT_VERSION)...$(COLOR_RESET)"
+	@mkdir -p $(TOOLS_BIN)
+	@GOBIN=$(TOOLS_BIN) go install \
+		github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@mv $(TOOLS_BIN)/golangci-lint $(GOLANGCI_LINT)
+	@echo "$(COLOR_GREEN)✓ golangci-lint $(GOLANGCI_LINT_VERSION) installed$(COLOR_RESET)"
+
 .PHONY: lint
-## lint: Run golangci-lint
-lint:
-	@echo "$(COLOR_GREEN)Running linter...$(COLOR_RESET)"
-	@if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
-		$(GOLANGCI_LINT) run $(LINT_DIRS) --timeout=5m && \
-		echo "$(COLOR_GREEN)✓ Linting passed$(COLOR_RESET)"; \
-	else \
-		echo "$(COLOR_RED)Error: golangci-lint not found. Run 'make install-tools' to install$(COLOR_RESET)"; \
-		exit 1; \
-	fi
+## lint: Run golangci-lint (pinned version, installed on first use)
+lint: $(GOLANGCI_LINT)
+	@echo "$(COLOR_GREEN)Running linter ($(GOLANGCI_LINT_VERSION))...$(COLOR_RESET)"
+	@$(GOLANGCI_LINT) run $(LINT_DIRS) --timeout=5m
+	@echo "$(COLOR_GREEN)✓ Linting passed$(COLOR_RESET)"
 
 .PHONY: lint-fix
 ## lint-fix: Run golangci-lint with auto-fix
-lint-fix:
-	@echo "$(COLOR_GREEN)Running linter with auto-fix...$(COLOR_RESET)"
+lint-fix: $(GOLANGCI_LINT)
+	@echo "$(COLOR_GREEN)Running linter with auto-fix ($(GOLANGCI_LINT_VERSION))...$(COLOR_RESET)"
 	@$(GOLANGCI_LINT) run $(LINT_DIRS) --fix --timeout=5m
 
 .PHONY: fmt
@@ -241,6 +265,7 @@ vuln-check:
 clean:
 	@echo "$(COLOR_GREEN)Cleaning...$(COLOR_RESET)"
 	@rm -rf $(COVERAGE_DIR)
+	@rm -rf $(TOOLS_BIN)
 	@rm -f bench.txt
 	@$(GOCMD) clean -cache -testcache
 	@echo "$(COLOR_GREEN)✓ Cleaned$(COLOR_RESET)"
@@ -268,8 +293,8 @@ docs:
 ## install-tools: Install development tools
 install-tools:
 	@echo "$(COLOR_GREEN)Installing development tools...$(COLOR_RESET)"
-	@echo "  Installing golangci-lint..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "  Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@$(MAKE) --no-print-directory $(GOLANGCI_LINT)
 	@echo "  Installing gosec..."
 	@go install github.com/securego/gosec/v2/cmd/gosec@latest
 	@echo "  Installing govulncheck..."
@@ -280,7 +305,9 @@ install-tools:
 ## check-tools: Check if required tools are installed
 check-tools:
 	@echo "$(COLOR_GREEN)Checking installed tools...$(COLOR_RESET)"
-	@command -v golangci-lint >/dev/null 2>&1 && echo "  ✓ golangci-lint" || echo "  ✗ golangci-lint"
+	@test -x $(GOLANGCI_LINT) \
+		&& echo "  ✓ golangci-lint $(GOLANGCI_LINT_VERSION) (pinned)" \
+		|| echo "  ✗ golangci-lint $(GOLANGCI_LINT_VERSION) (run 'make install-tools')"
 	@command -v gosec >/dev/null 2>&1 && echo "  ✓ gosec" || echo "  ✗ gosec"
 	@command -v govulncheck >/dev/null 2>&1 && echo "  ✓ govulncheck" || echo "  ✗ govulncheck"
 
