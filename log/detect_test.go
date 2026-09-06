@@ -96,6 +96,6 @@ func TestIsTerminalOnNonTerminal(t *testing.T) {
 	defer devnull.Close()
 
 	if isTerminal(devnull) {
-		t.Error("/dev/null is not a terminal")
+		t.Errorf("%s is not a terminal", os.DevNull)
 	}
 }

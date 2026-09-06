@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -114,13 +115,33 @@ func TestNewLoggerCreatesTheLogFilePrivate(t *testing.T) {
 		t.Fatalf("log file was not created: %v", err)
 	}
 
+	// Windows has no POSIX permission bits. OpenFile's perm argument only
+	// decides whether the read-only attribute gets set, and Stat reports a
+	// synthesised 0666 for any writable file and 0444 for a read-only one, so
+	// the 0600 this asserts can never be observed there. Access is governed by
+	// ACLs instead, which this library does not touch. Assert the property on
+	// the platforms where it exists rather than weakening it everywhere.
+	if runtime.GOOS == "windows" {
+		if info.Mode().Perm()&0o200 == 0 {
+			t.Errorf("log file is not writable: mode %04o", info.Mode().Perm())
+		}
+
+		t.Skip("file permission bits are not meaningful on Windows")
+	}
+
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Errorf("log file mode = %04o, want 0600", got)
 	}
 }
 
 func TestNewLoggerFallsBackToStderrOnUnopenablePath(t *testing.T) {
-	l := NewLogger(LoggingConfig{Level: "info", Output: "/nonexistent-dir-xyz/app.log"})
+	// A path inside a directory that does not exist, so O_CREATE fails on every
+	// platform. A hardcoded "/nonexistent-dir-xyz/..." would resolve to the
+	// current drive root on Windows, and would silently stop testing the
+	// fallback the day somebody happened to create that directory.
+	path := filepath.Join(t.TempDir(), "no-such-dir", "app.log")
+
+	l := NewLogger(LoggingConfig{Level: "info", Output: path})
 	if l == nil {
 		t.Fatal("NewLogger returned nil for an unopenable path")
 	}
