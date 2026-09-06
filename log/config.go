@@ -26,6 +26,11 @@ type Config struct {
 	Name        string
 	AddCaller   bool
 	Color       *bool // nil means auto
+
+	// ownsOutput is set only by NewLogger, when it opened Output itself and the
+	// resulting logger is therefore responsible for closing it. Unexported so a
+	// caller cannot claim ownership of a writer this package did not open.
+	ownsOutput bool
 }
 
 // LoggingConfig is the configuration-file-facing struct. Its shape and tags are
@@ -67,6 +72,15 @@ func New(cfg Config) Logger {
 	}
 
 	if m == modeNoop {
+		// Nothing will be written, so release the file if we are the ones who
+		// opened it. Otherwise a test binary that never logs still holds the
+		// handle open, which on Windows blocks deleting the file.
+		if cfg.ownsOutput {
+			if c, ok := out.(io.Closer); ok {
+				_ = c.Close()
+			}
+		}
+
 		return NewNoopLogger()
 	}
 
@@ -83,7 +97,12 @@ func New(cfg Config) Logger {
 		enc = &jsonEncoder{}
 	}
 
-	return newLogger(parseLevel(cfg.Level), enc, newSyncWriter(out), cfg.Name, cfg.AddCaller)
+	w := newSyncWriter(out)
+	if cfg.ownsOutput {
+		w = newOwnedSyncWriter(out)
+	}
+
+	return newLogger(parseLevel(cfg.Level), enc, w, cfg.Name, cfg.AddCaller)
 }
 
 // terminalWidth returns the width of the output terminal, defaulting to a
@@ -116,7 +135,10 @@ func NewLogger(cfg LoggingConfig) Logger {
 		format = FormatPretty
 	}
 
-	var out io.Writer
+	var (
+		out   io.Writer
+		owned bool
+	)
 
 	switch cfg.Output {
 	case "stdout":
@@ -139,6 +161,7 @@ func NewLogger(cfg LoggingConfig) Logger {
 			out = os.Stderr
 		} else {
 			out = f
+			owned = true
 		}
 	}
 
@@ -149,6 +172,7 @@ func NewLogger(cfg LoggingConfig) Logger {
 		Output:      out,
 		Name:        cfg.Name,
 		AddCaller:   true,
+		ownsOutput:  owned,
 	})
 }
 

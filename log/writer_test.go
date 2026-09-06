@@ -3,6 +3,7 @@ package log
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -44,6 +45,50 @@ func TestSyncWriterDoesNotTearLines(t *testing.T) {
 		if len(ln) != 5+500+3 {
 			t.Errorf("line %d has length %d, want %d", i, len(ln), 5+500+3)
 		}
+	}
+}
+
+// Close must actually release the descriptor, not just return nil. os.Remove
+// succeeds on an open file on POSIX, so a test that only removes the file
+// proves nothing; writing through the closed handle does.
+func TestSyncWriterCloseReleasesAnOwnedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "owned.log")
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := newOwnedSyncWriter(f)
+	if _, err := w.Write([]byte("before\n")); err != nil {
+		t.Fatalf("Write before Close: %v", err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if _, err := f.WriteString("after\n"); err == nil {
+		t.Error("the file is still open after Close")
+	}
+}
+
+// A writer this package did not open must survive Close untouched.
+func TestSyncWriterCloseSparesAnUnownedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unowned.log")
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	if err := newSyncWriter(f).Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if _, err := f.WriteString("still open\n"); err != nil {
+		t.Errorf("Close released a file it does not own: %v", err)
 	}
 }
 

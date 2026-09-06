@@ -247,6 +247,25 @@ func (l *logger) Sugar() SugarLogger { return &sugarLogger{l: l} }
 
 func (l *logger) Sync() error { return l.out.Sync() }
 
+// Close flushes and releases the log file this logger opened, if it opened one.
+// It is a no-op for a logger writing to os.Stdout, os.Stderr, or a writer the
+// caller supplied and therefore owns.
+//
+// Close is deliberately NOT part of the Logger interface, which stays
+// unchanged. Reach it with a type assertion where you need it:
+//
+//	if c, ok := logger.(io.Closer); ok {
+//		_ = c.Close()
+//	}
+func (l *logger) Close() error {
+	err := l.out.Sync()
+	if cerr := l.out.Close(); err == nil {
+		err = cerr
+	}
+
+	return err
+}
+
 // sugarLogger adapts the loosely typed key/value API onto Field.
 type sugarLogger struct {
 	l    *logger

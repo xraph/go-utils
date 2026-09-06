@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,18 @@ import (
 
 // Regression test for finding 8. LoggingConfig.Output was never read and the
 // logger always wrote to os.Stdout, so it could not be captured.
+// forceFormat pins the resolved format for one test. Format resolution consults
+// the test binary's own -v flag, so a test that builds a logger through
+// FormatAuto is measuring how the suite was invoked: noop under `go test`,
+// pretty under `go test -v`. Every test that cares which logger it gets must
+// pin the format, or it changes meaning depending on who runs it. This
+// repository's `make test` passes -v, which is the invocation least likely to
+// reveal the problem.
+func forceFormat(t *testing.T, f Format) {
+	t.Helper()
+	t.Setenv("FORGE_LOG_FORMAT", string(f))
+}
+
 func TestOutputIsHonoured(t *testing.T) {
 	var buf bytes.Buffer
 
@@ -106,9 +119,24 @@ func TestLoggingConfigStillWorks(t *testing.T) {
 // created world-readable. gosec flags this as G302; the test pins the property
 // rather than relying on the linter to keep noticing.
 func TestNewLoggerCreatesTheLogFilePrivate(t *testing.T) {
+	// Without this the logger is a noop under plain `go test`, which has no
+	// file to check the permissions of and no Close to call.
+	forceFormat(t, FormatJSON)
+
 	path := filepath.Join(t.TempDir(), "app.log")
 
-	NewLogger(LoggingConfig{Level: "info", Output: path}).Info("written")
+	l := NewLogger(LoggingConfig{Level: "info", Output: path})
+	l.Info("written")
+
+	// Release the file before t.TempDir's cleanup runs. POSIX happily unlinks
+	// an open file; Windows refuses, so without this the cleanup fails with
+	// "The process cannot access the file because it is being used by another
+	// process" and the test goes red for a reason unrelated to what it asserts.
+	if c, ok := l.(io.Closer); !ok {
+		t.Fatal("a file-backed logger must be closeable, got no io.Closer")
+	} else if err := c.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -132,6 +160,66 @@ func TestNewLoggerCreatesTheLogFilePrivate(t *testing.T) {
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Errorf("log file mode = %04o, want 0600", got)
 	}
+}
+
+// Close must release only what this package opened. A writer the caller handed
+// in, and os.Stdout/os.Stderr, stay open: closing them would be a surprise, and
+// closing os.Stderr would take out the process's error reporting.
+func TestCloseDoesNotTouchAWriterTheCallerOwns(t *testing.T) {
+	caller := &closeSpy{}
+
+	l := New(Config{Format: FormatJSON, Output: caller})
+	l.Info("written")
+
+	c, ok := l.(io.Closer)
+	if !ok {
+		t.Fatal("logger is not an io.Closer")
+	}
+
+	if err := c.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if caller.closed {
+		t.Error("Close closed a writer the caller supplied and still owns")
+	}
+}
+
+// A logger whose format resolves to noop must not sit on the file handle it
+// opened, or a test binary that never logs still blocks deleting the file.
+func TestNoopModeReleasesTheFileItOpened(t *testing.T) {
+	// The noop outcome only happens in a test binary WITHOUT -v. An explicit
+	// FORGE_LOG_FORMAT outranks test silence and -v resolves to pretty, so
+	// there is no way to force this branch: say so rather than let the test
+	// quietly stop exercising it under `make test`, which passes -v.
+	if testVerbose() {
+		t.Skip("format resolves to pretty under -v; this test targets the noop branch")
+	}
+
+	t.Setenv("FORGE_LOG_FORMAT", "")
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "unused.log")
+
+	// Under a test binary with no -v and no explicit format, this resolves to
+	// noop, so the file is opened and immediately unneeded.
+	NewLogger(LoggingConfig{Level: "info", Output: path})
+
+	if err := os.Remove(path); err != nil {
+		t.Errorf("noop-mode logger left the file open: %v", err)
+	}
+}
+
+type closeSpy struct {
+	bytes.Buffer
+
+	closed bool
+}
+
+func (c *closeSpy) Close() error {
+	c.closed = true
+
+	return nil
 }
 
 func TestNewLoggerFallsBackToStderrOnUnopenablePath(t *testing.T) {

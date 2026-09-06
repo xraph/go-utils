@@ -12,10 +12,20 @@ import (
 type syncWriter struct {
 	mu sync.Mutex
 	w  io.Writer
+
+	// owned is true only when this package opened w and is therefore
+	// responsible for closing it. A writer handed in by the caller, and
+	// os.Stdout/os.Stderr, are never ours to close.
+	owned bool
 }
 
 func newSyncWriter(w io.Writer) *syncWriter {
 	return &syncWriter{w: w}
+}
+
+// newOwnedSyncWriter wraps a writer this package opened and must close.
+func newOwnedSyncWriter(w io.Writer) *syncWriter {
+	return &syncWriter{w: w, owned: true}
 }
 
 func (s *syncWriter) Write(p []byte) (int, error) {
@@ -23,6 +33,27 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	defer s.mu.Unlock()
 
 	return s.w.Write(p)
+}
+
+// Close releases the underlying writer, but only when this package opened it.
+// Closing a caller's writer, or os.Stdout, would be a surprise; closing a file
+// this package opened is the only way to release it, which on Windows is the
+// difference between a log file that can be rotated or deleted and one that
+// cannot.
+func (s *syncWriter) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.owned {
+		return nil
+	}
+
+	c, ok := s.w.(io.Closer)
+	if !ok {
+		return nil
+	}
+
+	return c.Close()
 }
 
 // Sync flushes the underlying writer when it supports it. Files do; buffers and
