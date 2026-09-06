@@ -124,7 +124,15 @@ func NewLogger(cfg LoggingConfig) Logger {
 	default:
 		// A path. If it cannot be opened, fall back to stderr rather than
 		// returning a logger that panics on first use.
-		f, err := os.OpenFile(cfg.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		//
+		// 0600, not 0644: a log file holds whatever the application logs, which
+		// routinely means request paths, user and trace ids, and error text from
+		// deeper in the stack. World-readable is the wrong default for that on a
+		// shared host. The mode only applies when this call creates the file, so
+		// an operator who needs the logs readable by a shipping agent under
+		// another account can pre-create the file with the permissions they want
+		// and this will not override them.
+		f, err := os.OpenFile(cfg.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
 			out = os.Stderr
 		} else {

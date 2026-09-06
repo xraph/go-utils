@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -99,6 +101,24 @@ func TestLoggingConfigStillWorks(t *testing.T) {
 
 // NewLogger falls back to stderr when the configured path cannot be opened,
 // rather than returning a logger that panics on first use.
+// A log file holds request paths, user ids and error text, so it must not be
+// created world-readable. gosec flags this as G302; the test pins the property
+// rather than relying on the linter to keep noticing.
+func TestNewLoggerCreatesTheLogFilePrivate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.log")
+
+	NewLogger(LoggingConfig{Level: "info", Output: path}).Info("written")
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("log file was not created: %v", err)
+	}
+
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("log file mode = %04o, want 0600", got)
+	}
+}
+
 func TestNewLoggerFallsBackToStderrOnUnopenablePath(t *testing.T) {
 	l := NewLogger(LoggingConfig{Level: "info", Output: "/nonexistent-dir-xyz/app.log"})
 	if l == nil {
