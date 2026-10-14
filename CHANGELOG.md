@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/xraph/go-utils/compare/v1.3.0...v1.4.0) (2026-10-14)
+
+### Features
+
+* span_id in log context and metrics series limits ([#7](https://github.com/xraph/go-utils/issues/7)) ([d886d3f](https://github.com/xraph/go-utils/commit/d886d3fe145aacab53f4c39bc1a10bc1f81d4a8a))
+
 ## [1.3.0](https://github.com/xraph/go-utils/compare/v1.2.2...v1.3.0) (2026-09-06)
 
 ### Features
