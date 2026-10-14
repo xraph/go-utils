@@ -211,6 +211,14 @@ var (
 
 		return String("trace_id", id)
 	}
+	SpanID = func(ctx context.Context) Field {
+		id := SpanIDFromContext(ctx)
+		if id == "" {
+			return Field{key: "span_id", typ: unknownType}
+		}
+
+		return String("span_id", id)
+	}
 	UserID = func(ctx context.Context) Field {
 		id := UserIDFromContext(ctx)
 		if id == "" {
@@ -221,13 +229,17 @@ var (
 	}
 
 	ContextFields = func(ctx context.Context) []Field {
-		fields := make([]Field, 0, 3)
+		fields := make([]Field, 0, 4)
 		if id := RequestIDFromContext(ctx); id != "" {
 			fields = append(fields, String("request_id", id))
 		}
 
 		if id := TraceIDFromContext(ctx); id != "" {
 			fields = append(fields, String("trace_id", id))
+		}
+
+		if id := SpanIDFromContext(ctx); id != "" {
+			fields = append(fields, String("span_id", id))
 		}
 
 		if id := UserIDFromContext(ctx); id != "" {
