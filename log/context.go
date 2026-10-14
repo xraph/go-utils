@@ -12,6 +12,7 @@ const (
 	requestIDKey
 	traceIDKey
 	userIDKey
+	spanIDKey
 )
 
 // Context helper functions
@@ -64,6 +65,24 @@ func TraceIDFromContext(ctx context.Context) string {
 	}
 
 	if id, ok := ctx.Value(traceIDKey).(string); ok {
+		return id
+	}
+
+	return ""
+}
+
+// WithSpanID adds a span ID to the context.
+func WithSpanID(ctx context.Context, spanID string) context.Context {
+	return context.WithValue(ctx, spanIDKey, spanID)
+}
+
+// SpanIDFromContext extracts the span ID from the context.
+func SpanIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+
+	if id, ok := ctx.Value(spanIDKey).(string); ok {
 		return id
 	}
 

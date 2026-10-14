@@ -104,6 +104,9 @@ type MetricsFeatures struct {
 	SystemMetrics  bool `json:"system_metrics"  yaml:"system_metrics"`
 	RuntimeMetrics bool `json:"runtime_metrics" yaml:"runtime_metrics"`
 	HTTPMetrics    bool `json:"http_metrics"    yaml:"http_metrics"`
+	// HTTPBodySizes records request and response body size histograms
+	// alongside the HTTP duration metric. Off by default.
+	HTTPBodySizes bool `json:"http_body_sizes" yaml:"http_body_sizes"`
 }
 
 // MetricsCollection configures how metrics are collected.
@@ -118,6 +121,9 @@ type MetricsCollection struct {
 type MetricsLimits struct {
 	MaxMetrics int `json:"max_metrics" yaml:"max_metrics"`
 	BufferSize int `json:"buffer_size" yaml:"buffer_size"`
+	// MaxSeriesPerMetric caps the distinct label sets one metric name may
+	// hold. Zero means the consumer's default.
+	MaxSeriesPerMetric int `json:"max_series_per_metric" yaml:"max_series_per_metric"`
 }
 
 // MetricsConfig configures metrics collection.
