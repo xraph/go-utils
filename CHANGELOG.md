@@ -1,3 +1,14 @@
+## [1.4.1](https://github.com/xraph/go-utils/compare/v1.4.0...v1.4.1) (2026-10-15)
+
+### Bug Fixes
+
+* **metrics:** interpolate histogram quantiles and give timers duration buckets ([#8](https://github.com/xraph/go-utils/issues/8)) ([51870c8](https://github.com/xraph/go-utils/commit/51870c80c9c1537b8e356a88634165e80b201e14))
+
+### Performance Improvements
+
+* **log:** keep the trace and span IDs in one context node ([960c188](https://github.com/xraph/go-utils/commit/960c1885fc0fa231bf58becc032896b973184956))
+* **metrics:** stop allocating on Inc, Dec, Observe and exemplar adds ([c7ffb3a](https://github.com/xraph/go-utils/commit/c7ffb3ab99084915b57c25cd0b988a6edcec7100))
+
 ## [1.4.0](https://github.com/xraph/go-utils/compare/v1.3.0...v1.4.0) (2026-10-14)
 
 ### Features
