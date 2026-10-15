@@ -43,7 +43,10 @@ type metricCore struct {
 	subsystem   string
 	constLabels map[string]string
 	labels      map[string]string
-	timestamp   atomic.Value // stores time.Time
+	// timestamp is the last update in Unix nanoseconds. An atomic.Value
+	// holding a time.Time boxed it on every store, one allocation per Inc,
+	// Dec or Observe.
+	timestamp atomic.Int64
 }
 
 // newMetricCore creates a new metric core with options applied.
@@ -64,7 +67,7 @@ func newMetricCore(name string, metricType MetricType, opts ...MetricOption) *me
 		labels:      options.Labels,
 	}
 
-	mc.timestamp.Store(time.Now())
+	mc.timestamp.Store(time.Now().UnixNano())
 
 	return mc
 }
@@ -117,12 +120,12 @@ func (mc *metricCore) fullName() string {
 
 // updateTimestamp updates the timestamp to current time.
 func (mc *metricCore) updateTimestamp() {
-	mc.timestamp.Store(time.Now())
+	mc.timestamp.Store(time.Now().UnixNano())
 }
 
 // getTimestamp returns the current timestamp.
 func (mc *metricCore) getTimestamp() time.Time {
-	return mc.timestamp.Load().(time.Time)
+	return time.Unix(0, mc.timestamp.Load())
 }
 
 // =============================================================================
@@ -133,8 +136,17 @@ const exemplarBufferSize = 10
 
 // exemplarStore is a thread-safe ring buffer for storing exemplars.
 type exemplarStore struct {
-	exemplars [exemplarBufferSize]atomic.Value // each stores *Exemplar
-	index     atomic.Uint32
+	slots [exemplarBufferSize]exemplarSlot
+	index atomic.Uint32
+}
+
+// exemplarSlot holds one exemplar by value. Consecutive writers land on
+// different slots, so the lock is almost never contended, and copying into
+// the slot costs no allocation where storing a pointer did.
+type exemplarSlot struct {
+	mu  sync.Mutex
+	set bool
+	ex  Exemplar
 }
 
 // newExemplarStore creates a new exemplar store.
@@ -142,22 +154,28 @@ func newExemplarStore() *exemplarStore {
 	return &exemplarStore{}
 }
 
-// Add adds an exemplar to the store.
+// Add adds an exemplar to the store, replacing the oldest once it is full.
 func (es *exemplarStore) Add(exemplar Exemplar) {
-	idx := es.index.Add(1) % exemplarBufferSize
-	es.exemplars[idx].Store(&exemplar)
+	slot := &es.slots[es.index.Add(1)%exemplarBufferSize]
+
+	slot.mu.Lock()
+	slot.ex = exemplar
+	slot.set = true
+	slot.mu.Unlock()
 }
 
 // GetAll returns all stored exemplars.
 func (es *exemplarStore) GetAll() []Exemplar {
 	result := make([]Exemplar, 0, exemplarBufferSize)
 
-	for i := range exemplarBufferSize {
-		if val := es.exemplars[i].Load(); val != nil {
-			if ex, ok := val.(*Exemplar); ok && ex != nil {
-				result = append(result, *ex)
-			}
+	for i := range es.slots {
+		slot := &es.slots[i]
+
+		slot.mu.Lock()
+		if slot.set {
+			result = append(result, slot.ex)
 		}
+		slot.mu.Unlock()
 	}
 
 	return result
