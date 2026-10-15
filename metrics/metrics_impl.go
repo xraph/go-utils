@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -532,36 +533,73 @@ func (h *histogramImpl) Max() float64 {
 	return math.Float64frombits(h.max.Load())
 }
 
+// Percentile estimates the value at the given quantile (0.0-1.0) from the
+// bucket counts. It finds the bucket holding rank percentile*count and
+// interpolates linearly across it, as Prometheus' histogram_quantile does.
+// Each bucket's edges are narrowed to the observed minimum and maximum, which
+// also gives the first bucket a lower edge and the +Inf bucket an upper one,
+// so a histogram holding one observation reports that observation exactly.
 func (h *histogramImpl) Percentile(percentile float64) float64 {
 	if percentile < 0 || percentile > 1 {
 		return 0
 	}
 
-	count := h.Count()
-	if count == 0 {
-		return 0
-	}
-
-	// Find the bucket containing the percentile
-	targetRank := uint64(float64(count) * percentile)
-	cumulative := uint64(0)
-
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	for i := range h.buckets {
-		cumulative += h.counts[i].Load()
-		if cumulative >= targetRank {
-			return h.buckets[i]
+	// Snapshot the counts so the rank and the walk agree while Observe runs.
+	// The default bucket sets fit the stack buffer, so a scrape doesn't
+	// allocate here.
+	var buf [32]uint64
+
+	counts := buf[:0]
+
+	var total uint64
+
+	for i := range h.counts {
+		c := h.counts[i].Load()
+		counts = append(counts, c)
+		total += c
+	}
+
+	if total == 0 {
+		return 0
+	}
+
+	// Observe moves min and max before it bumps a bucket, so every counted
+	// observation already lies inside [lo, hi].
+	lo, hi := h.Min(), h.Max()
+	rank := percentile * float64(total)
+
+	var cumulative uint64
+
+	for i, c := range counts {
+		if c == 0 {
+			continue
 		}
+
+		if float64(cumulative+c) < rank {
+			cumulative += c
+
+			continue
+		}
+
+		lower := lo
+		if i > 0 {
+			lower = max(lo, h.buckets[i-1])
+		}
+
+		upper := hi
+		if i < len(h.buckets) {
+			upper = min(hi, h.buckets[i])
+		}
+
+		upper = max(upper, lower)
+
+		return lower + (upper-lower)*(rank-float64(cumulative))/float64(c)
 	}
 
-	// If we get here, return the last bucket
-	if len(h.buckets) > 0 {
-		return h.buckets[len(h.buckets)-1]
-	}
-
-	return 0
+	return hi
 }
 
 func (h *histogramImpl) Quantile(q float64) float64 {
@@ -829,14 +867,16 @@ func NewTimer(name string, opts ...MetricOption) *timerImpl {
 		opt(options)
 	}
 
-	// Use duration buckets if not specified
+	// Use duration buckets if not specified. The histogram reads its buckets
+	// from opts, so the default has to travel there too.
+	histOpts := opts
 	if len(options.Buckets) == 0 {
-		options.Buckets = DefaultDurationBuckets
+		histOpts = append(slices.Clip(opts), WithBuckets(DefaultDurationBuckets...))
 	}
 
 	t := &timerImpl{
 		metricCore: newMetricCore(name, MetricTypeTimer, opts...),
-		histogram:  NewHistogram(name+"_duration", opts...),
+		histogram:  NewHistogram(name+"_duration", histOpts...),
 		exemplars:  newExemplarStore(),
 	}
 
