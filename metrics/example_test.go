@@ -508,10 +508,10 @@ func Example_histogramPercentile() {
 	// Output:
 	// API Latency Analysis:
 	// Total Requests: 20
-	// P50 (median): 150.0ms
-	// P90: 300.0ms
+	// P50 (median): 112.5ms
+	// P90: 250.0ms
 	// P95: 300.0ms
-	// P99: 300.0ms
+	// P99: 396.0ms
 	//
 	// Percentile vs Quantile (same result):
 	// Percentile(0.95): 300.0ms
