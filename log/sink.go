@@ -32,8 +32,11 @@ type Sink interface {
 	Emit(rec Record)
 }
 
-// Flusher is implemented by a Sink that buffers. Fatal flushes every
-// attached Flusher before the process exits.
+// Flusher is implemented by a Sink that buffers. Fatal, Fatalf and Fatalw call
+// Flush on every attached Flusher, once per attachment, after the line is
+// written and just before the process exits. Nothing else calls Flush, so a
+// program that wants its buffered lines on a normal shutdown calls Flush itself.
+// A Flush that panics is skipped, and the next sink is still flushed.
 type Flusher interface {
 	Flush()
 }
@@ -139,6 +142,27 @@ func emit(sinks []*sinkEntry, rec Record) {
 	for _, e := range sinks {
 		emitSafe(e.s, rec)
 	}
+}
+
+// flushSinks calls Flush on every attached sink that implements Flusher, each
+// under its own recover. Fatal calls it just before os.Exit.
+func (l *logger) flushSinks() {
+	sp := l.sinks.p.Load()
+	if sp == nil {
+		return
+	}
+
+	for _, e := range *sp {
+		if f, ok := e.s.(Flusher); ok {
+			flushSafe(f)
+		}
+	}
+}
+
+func flushSafe(f Flusher) {
+	defer func() { _ = recover() }()
+
+	f.Flush()
 }
 
 func emitSafe(s Sink, rec Record) {

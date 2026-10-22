@@ -164,6 +164,8 @@ func (l *logger) Fatal(msg string, fields ...Field) {
 
 	_ = l.out.Sync()
 
+	l.flushSinks()
+
 	os.Exit(1)
 }
 
@@ -205,6 +207,8 @@ func (l *logger) Fatalf(t string, a ...any) {
 	}
 
 	_ = l.out.Sync()
+
+	l.flushSinks()
 
 	os.Exit(1)
 }
@@ -341,6 +345,8 @@ func (s *sugarLogger) Fatalw(msg string, kv ...any) {
 	}
 
 	_ = s.l.out.Sync()
+
+	s.l.flushSinks()
 
 	os.Exit(1)
 }
