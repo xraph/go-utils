@@ -33,32 +33,39 @@ type Flusher interface {
 // carry sinks: the noop logger, the capture logger, or a custom implementation.
 var ErrSinksUnsupported = errors.New("log: logger does not support sinks")
 
-// sinkCell is the set of sinks shared by a logger and every logger derived
-// from it, the same way the level cell is shared. Readers load the pointer and
+// sinkEntry is one attachment. The cell holds pointers to entries so detach
+// can find its own attachment by identity, whatever the sink's dynamic type.
+// A func-typed or slice-holding Sink is not comparable, and the same sink
+// attached twice is two attachments.
+type sinkEntry struct {
+	s Sink
+}
+
+// sinkCell is the set of sinks shared by every logger that came from one New
+// call, the same way the level cell is shared. Readers load the pointer and
 // never lock. Writers copy the slice under mu and store a new one.
 type sinkCell struct {
 	mu sync.Mutex
-	p  atomic.Pointer[[]Sink]
+	p  atomic.Pointer[[]*sinkEntry]
 }
 
-func (c *sinkCell) add(s Sink) {
+func (c *sinkCell) add(e *sinkEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	var next []Sink
+	var next []*sinkEntry
 
 	if cur := c.p.Load(); cur != nil {
-		next = make([]Sink, len(*cur), len(*cur)+1)
+		next = make([]*sinkEntry, len(*cur), len(*cur)+1)
 		copy(next, *cur)
 	}
 
-	next = append(next, s)
+	next = append(next, e)
 	c.p.Store(&next)
 }
 
-// remove drops the first sink equal to s. Detaching the same sink twice from
-// one AttachSink call is guarded by the caller's sync.Once.
-func (c *sinkCell) remove(s Sink) {
+// remove drops e from the cell. It is a no-op when e is already gone.
+func (c *sinkCell) remove(e *sinkEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -68,7 +75,7 @@ func (c *sinkCell) remove(s Sink) {
 	}
 
 	for i, have := range *cur {
-		if have != s {
+		if have != e {
 			continue
 		}
 
@@ -78,7 +85,7 @@ func (c *sinkCell) remove(s Sink) {
 			return
 		}
 
-		next := make([]Sink, 0, len(*cur)-1)
+		next := make([]*sinkEntry, 0, len(*cur)-1)
 		next = append(next, (*cur)[:i]...)
 		next = append(next, (*cur)[i+1:]...)
 		c.p.Store(&next)
@@ -87,12 +94,15 @@ func (c *sinkCell) remove(s Sink) {
 	}
 }
 
-// AttachSink adds s to l and to every logger derived from l, including
-// loggers With and Named returned before the call. detach removes it, and a
-// second call to detach does nothing.
+// AttachSink adds s to l. The sink set is shared by every logger built from
+// the same New call, so s receives every line written by any logger that
+// shares l's root: l itself, loggers derived from it with With or Named
+// (including ones returned before this call), and its parents and siblings.
+// Attaching to a child therefore also delivers lines written through the root.
 //
-// The sink must be comparable (a pointer, usually), because detach finds it by
-// identity.
+// detach removes this attachment only, and a second call to detach does
+// nothing. Attaching the same sink twice makes two attachments, each removed by
+// its own detach. Any Sink works, comparable or not.
 func AttachSink(l Logger, s Sink) (detach func(), err error) {
 	lg, ok := l.(*logger)
 	if !ok || lg.sinks == nil {
@@ -100,18 +110,19 @@ func AttachSink(l Logger, s Sink) (detach func(), err error) {
 	}
 
 	cell := lg.sinks
-	cell.add(s)
+	e := &sinkEntry{s: s}
+	cell.add(e)
 
 	var once sync.Once
 
-	return func() { once.Do(func() { cell.remove(s) }) }, nil
+	return func() { once.Do(func() { cell.remove(e) }) }, nil
 }
 
 // emit hands one line to every attached sink. A sink that panics loses its own
 // line and nothing else.
-func emit(sinks []Sink, rec Record) {
-	for _, s := range sinks {
-		emitSafe(s, rec)
+func emit(sinks []*sinkEntry, rec Record) {
+	for _, e := range sinks {
+		emitSafe(e.s, rec)
 	}
 }
 

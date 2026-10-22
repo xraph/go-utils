@@ -47,6 +47,11 @@ func (s *recSink) snapshot() []recorded {
 	return append([]recorded(nil), s.recs...)
 }
 
+// sinkFunc is a func-typed Sink, which is not comparable with ==.
+type sinkFunc func(Record)
+
+func (f sinkFunc) Emit(r Record) { f(r) }
+
 type panicSink struct{}
 
 func (panicSink) Emit(Record) { panic("sink exploded") }
@@ -108,6 +113,91 @@ func TestDetachStopsDelivery(t *testing.T) {
 
 	if got := len(s.snapshot()); got != 1 {
 		t.Fatalf("got %d records, want 1", got)
+	}
+}
+
+func TestDetachWorksForNonComparableSink(t *testing.T) {
+	l := sinkTestLogger(LevelDebug)
+
+	var (
+		mu  sync.Mutex
+		got int
+	)
+
+	detach := mustAttach(t, l, sinkFunc(func(Record) {
+		mu.Lock()
+		got++
+		mu.Unlock()
+	}))
+
+	l.Info("one")
+	detach()
+	l.Info("two")
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if got != 1 {
+		t.Fatalf("got %d records, want 1", got)
+	}
+}
+
+func TestSameSinkAttachedTwiceDetachesOnce(t *testing.T) {
+	l := sinkTestLogger(LevelDebug)
+	s := &recSink{}
+	first := mustAttach(t, l, s)
+	mustAttach(t, l, s)
+
+	l.Info("both")
+
+	if got := len(s.snapshot()); got != 2 {
+		t.Fatalf("before detach: got %d records, want 2", got)
+	}
+
+	first()
+	first()
+	l.Info("one left")
+
+	if got := len(s.snapshot()); got != 3 {
+		t.Fatalf("after one detach: got %d records, want 3", got)
+	}
+}
+
+func TestDetachLeavesOtherSinks(t *testing.T) {
+	l := sinkTestLogger(LevelDebug)
+	a, b := &recSink{}, &recSink{}
+	detachA := mustAttach(t, l, a)
+	mustAttach(t, l, b)
+
+	l.Info("one")
+	detachA()
+	l.Info("two")
+
+	if got := len(a.snapshot()); got != 1 {
+		t.Errorf("a got %d records, want 1", got)
+	}
+
+	if got := len(b.snapshot()); got != 2 {
+		t.Errorf("b got %d records, want 2", got)
+	}
+}
+
+func TestAttachToChildReachesRootAndSiblings(t *testing.T) {
+	root := sinkTestLogger(LevelDebug)
+	child := root.Named("http")
+	s := &recSink{}
+	mustAttach(t, child, s)
+
+	root.Info("from root")
+	root.Named("db").Info("from sibling")
+
+	recs := s.snapshot()
+	if len(recs) != 2 {
+		t.Fatalf("got %d records, want 2", len(recs))
+	}
+
+	if recs[0].Logger != "" || recs[1].Logger != "db" {
+		t.Errorf("loggers = %q, %q; want \"\" and db", recs[0].Logger, recs[1].Logger)
 	}
 }
 
