@@ -20,13 +20,15 @@ type logger struct {
 	name      string
 	fields    []Field
 	addCaller bool
+	// sinks is shared by every logger derived from this one, like lvl.
+	sinks *sinkCell
 }
 
 func newLogger(lvl level, enc encoder, w *syncWriter, name string, addCaller bool) *logger {
 	var l atomic.Int32
 	l.Store(int32(lvl))
 
-	return &logger{lvl: &l, enc: enc, out: w, name: name, addCaller: addCaller}
+	return &logger{lvl: &l, enc: enc, out: w, name: name, addCaller: addCaller, sinks: &sinkCell{}}
 }
 
 // setLevel changes the level of this logger and every logger sharing its level
@@ -97,6 +99,17 @@ func (l *logger) log(lv level, msg string, fields []Field, skip int) {
 	*buf = l.enc.encode((*buf)[:0], e, all)
 	_, _ = l.out.Write(*buf)
 	putBuf(buf)
+
+	if sp := l.sinks.p.Load(); sp != nil {
+		emit(*sp, Record{
+			Time:    e.ts,
+			Level:   lv.logLevel(),
+			Message: msg,
+			Logger:  l.name,
+			Caller:  e.caller,
+			Fields:  all,
+		})
+	}
 
 	if pooled != nil {
 		fieldsPool.Put(pooled)
