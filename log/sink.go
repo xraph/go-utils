@@ -18,7 +18,16 @@ type Record struct {
 }
 
 // Sink receives every line a logger writes, after the level check.
-// Emit must not keep Record.Fields after it returns; copy what you need.
+//
+// Emit runs on the goroutine that logged, so it is called concurrently from
+// every goroutine that logs, and it must be safe for that. It runs after the
+// line has been written to the output, so a sink can see lines in a different
+// order than the writer did.
+//
+// Emit must not keep Record.Fields after it returns; copy what you need. It
+// must not log through the same logger tree (the logger it was attached to, or
+// any logger derived from it), because that calls Emit again and recurses
+// without bound.
 type Sink interface {
 	Emit(rec Record)
 }
@@ -103,7 +112,13 @@ func (c *sinkCell) remove(e *sinkEntry) {
 // detach removes this attachment only, and a second call to detach does
 // nothing. Attaching the same sink twice makes two attachments, each removed by
 // its own detach. Any Sink works, comparable or not.
+//
+// A nil s attaches nothing: it returns a no-op detach and a nil error.
 func AttachSink(l Logger, s Sink) (detach func(), err error) {
+	if s == nil {
+		return func() {}, nil
+	}
+
 	lg, ok := l.(*logger)
 	if !ok || lg.sinks == nil {
 		return func() {}, ErrSinksUnsupported

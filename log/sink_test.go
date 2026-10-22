@@ -3,7 +3,7 @@ package log
 import (
 	"errors"
 	"io"
-	"strings"
+	"regexp"
 	"sync"
 	"testing"
 )
@@ -324,6 +324,8 @@ func TestAttachSinkUnsupported(t *testing.T) {
 	}
 }
 
+var callerRe = regexp.MustCompile(`sink_test\.go:\d+$`)
+
 func TestCallerIsPassedWhenEnabled(t *testing.T) {
 	l := New(Config{Format: FormatJSON, Output: io.Discard, Level: LevelDebug, AddCaller: true})
 	s := &recSink{}
@@ -336,9 +338,37 @@ func TestCallerIsPassedWhenEnabled(t *testing.T) {
 		t.Fatalf("got %d records, want 1", len(recs))
 	}
 
-	if !strings.Contains(recs[0].Caller, "sink_test.go:") {
-		t.Errorf("Caller = %q, want it to name sink_test.go", recs[0].Caller)
+	if !callerRe.MatchString(recs[0].Caller) {
+		t.Errorf("Caller = %q, want it to match %s", recs[0].Caller, callerRe)
 	}
+}
+
+// AttachSink(l, nil) attaches nothing and reports no error, even on a logger
+// that cannot carry sinks.
+func TestAttachNilSink(t *testing.T) {
+	for name, l := range map[string]Logger{
+		"real": sinkTestLogger(LevelDebug),
+		"noop": NewNoopLogger(),
+	} {
+		detach, err := AttachSink(l, nil)
+		if err != nil {
+			t.Errorf("%s: AttachSink(nil) error = %v, want nil", name, err)
+		}
+
+		if detach == nil {
+			t.Fatalf("%s: detach is nil, want a no-op func", name)
+		}
+
+		detach()
+		detach()
+	}
+
+	l := sinkTestLogger(LevelDebug)
+	if _, err := AttachSink(l, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	l.Info("no sink, no panic")
 }
 
 func TestCallerIsEmptyWhenDisabled(t *testing.T) {
@@ -348,7 +378,12 @@ func TestCallerIsEmptyWhenDisabled(t *testing.T) {
 
 	l.Info("where")
 
-	if c := s.snapshot()[0].Caller; c != "" {
+	recs := s.snapshot()
+	if len(recs) != 1 {
+		t.Fatalf("got %d records, want 1", len(recs))
+	}
+
+	if c := recs[0].Caller; c != "" {
 		t.Errorf("Caller = %q, want empty", c)
 	}
 }
