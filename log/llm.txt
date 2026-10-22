@@ -368,6 +368,58 @@ config.Watch("log.level", func(change ConfigChange) {
 })
 ```
 
+### Sinks
+
+A sink gets a copy of every line a logger writes, so you can ship logs somewhere
+else without touching the writer. Only lines that pass the level check arrive.
+
+```go
+type Record struct {
+    Time    time.Time
+    Level   LogLevel // "debug", "info", "warn", "error", "fatal"
+    Message string
+    Logger  string  // the Named path, empty for the root
+    Caller  string  // "dir/file.go:123", empty unless AddCaller is on
+    Fields  []Field // logger fields, then call fields
+}
+
+type Sink interface{ Emit(rec Record) }
+type Flusher interface{ Flush() }
+
+func AttachSink(l Logger, s Sink) (detach func(), err error)
+var ErrSinksUnsupported error
+```
+
+```go
+detach, err := log.AttachSink(logger, mySink)
+if err != nil {
+    // ErrSinksUnsupported: the noop logger, the capture logger or a custom Logger
+}
+defer detach()
+```
+
+Things to know before you write one:
+
+- `Fields` is only valid during `Emit`. The slice is recycled as soon as `Emit`
+  returns, so copy the keys and values you want to keep.
+- `Emit` runs on the goroutine that logged, after the line has reached the
+  output. Many goroutines call it at once, and a sink can see lines in a different
+  order than the writer did. Keep it cheap: enqueue and return.
+- Never log through the same logger tree from inside `Emit`. It calls `Emit`
+  again and recurses until the stack runs out.
+- The sink set is shared by every logger that came from one `New` call. Attach
+  to a child made by `With` or `Named` and you also get lines written through the
+  root, its parents and its siblings, including loggers you made before the call.
+- Each `AttachSink` is its own attachment. `detach` removes that one and is safe
+  to call twice. Attaching the same sink twice means two attachments and two
+  copies of every line. A nil sink attaches nothing and returns a no-op `detach`.
+- A sink that panics in `Emit` loses its own line. The writer and the other sinks
+  are not affected.
+- `Fatal`, `Fatalf` and `Sugar().Fatalw` call `Flush` on every attached sink that
+  implements `Flusher` just before the process exits, once per attachment, and
+  skip a `Flush` that panics. Nothing else calls `Flush`. On a normal shutdown you
+  flush your own sink.
+
 ## Configuration
 
 ```yaml
