@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/xraph/go-utils/compare/v1.4.1...v1.5.0) (2026-10-22)
+
+### Features
+
+* **log:** add sinks that receive every written line ([0b90e84](https://github.com/xraph/go-utils/commit/0b90e847b19471888b92ff4013f85f280019ed14))
+
 ## [1.4.1](https://github.com/xraph/go-utils/compare/v1.4.0...v1.4.1) (2026-10-15)
 
 ### Bug Fixes
