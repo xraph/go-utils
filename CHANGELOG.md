@@ -1,3 +1,9 @@
+## [1.5.1](https://github.com/xraph/go-utils/compare/v1.5.0...v1.5.1) (2026-11-16)
+
+### Bug Fixes
+
+* **http:** stop request bodies overwriting path, query and header fields ([#10](https://github.com/xraph/go-utils/issues/10)) ([33938c6](https://github.com/xraph/go-utils/commit/33938c62149d7a45aee49e3287af8ed4fc0d8bb8))
+
 ## [1.5.0](https://github.com/xraph/go-utils/compare/v1.4.1...v1.5.0) (2026-10-22)
 
 ### Features
