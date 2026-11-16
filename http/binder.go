@@ -21,6 +21,12 @@ import (
 //   - Binds body fields from request body (json:"name" or body:"")
 //   - Validates all fields using validation tags (required, minLength, etc.)
 //
+// A field tagged path, query or header is only ever bound from that source.
+// The body cannot set it, even when it names the field (encoding/json matches
+// untagged field names case-insensitively) and even when the field also
+// carries a json tag. When the parameter is absent the field keeps its
+// default, or whatever the caller set before calling BindRequest.
+//
 // Example:
 //
 //	type CreateUserRequest struct {
@@ -65,8 +71,10 @@ func (c *Ctx) BindRequest(v any) error {
 		return err
 	}
 
-	// Bind body fields (if any) - this handles json/body tagged fields
-	if err := c.bindBodyFields(v, rt); err != nil {
+	// Bind body fields (if any) - this handles json/body tagged fields. The
+	// body cannot overwrite anything bound above: fields tagged path, query
+	// or header keep their parameter value even when the body names them.
+	if err := c.bindBodyFields(v, rv, bodyBindPlanFor(rt)); err != nil {
 		// Don't fail on body binding for GET requests without body
 		if c.request.Method != gohttp.MethodGet && c.request.Method != gohttp.MethodHead && c.request.Method != gohttp.MethodDelete {
 			return fmt.Errorf("failed to bind body: %w", err)
@@ -448,33 +456,15 @@ func mediaType(contentType string) string {
 }
 
 // bindBodyFields binds body/json tagged fields.
-func (c *Ctx) bindBodyFields(v any, rt reflect.Type) error {
-	// Check if struct has body fields
-	hasBodyFields := false
-
-	for i := range rt.NumField() {
-		field := rt.Field(i)
-		if field.Tag.Get("path") == "" &&
-			field.Tag.Get("query") == "" &&
-			field.Tag.Get("header") == "" {
-			// Check if has json or body tag
-			if field.Tag.Get("json") != "" && field.Tag.Get("json") != "-" {
-				hasBodyFields = true
-
-				break
-			}
-
-			if field.Tag.Get("body") != "" && field.Tag.Get("body") != "-" {
-				hasBodyFields = true
-
-				break
-			}
-		}
-	}
-
-	if !hasBodyFields {
+//
+// The body is decoded so that it cannot reach a field bound from the path,
+// the query string or a header; see decodeBodyIsolated.
+func (c *Ctx) bindBodyFields(v any, rv reflect.Value, plan *bodyBindPlan) error {
+	if !plan.hasBodyFields {
 		return nil
 	}
+
+	rt := rv.Type()
 
 	if c.hasFormBody() {
 		// Fields tagged form:"..." were already read by bindFormParam, and a
@@ -491,8 +481,7 @@ func (c *Ctx) bindBodyFields(v any, rt reflect.Type) error {
 			mediaType(c.request.Header.Get("Content-Type")), rt.String())
 	}
 
-	// Bind body content using existing Bind method
-	return c.Bind(v)
+	return c.decodeBodyIsolated(v, rv, plan.params)
 }
 
 // parseTagName extracts the parameter name from a tag value

@@ -176,6 +176,11 @@ func handler(ctx http.Context) error {
 }
 ```
 
+**Binding precedence:** a field tagged `path`, `query` or `header` is only ever
+filled from that source. The request body cannot set it, even when the body
+names the field or the field also carries a `json` tag. When the parameter is
+absent the field keeps its `default` or the value you set before binding.
+
 **Validation Features:**
 - Hybrid validation: go-playground/validator + custom tags
 - Custom validators: `format`, `minLength`, `maxLength`, `pattern`, `enum`, `minimum`, `maximum`, `multipleOf`
