@@ -100,3 +100,51 @@ func BenchmarkValidation_ComplexStruct(b *testing.B) {
 		_ = ctx.validateStruct(&testData, reflect.TypeFor[ComplexStruct](), errors)
 	}
 }
+
+// patternValidationStruct carries two pattern constraints plus numeric and
+// length bounds. Every one of those used to be re-derived from the struct tag
+// on each request: the pattern recompiled through regexp.MatchString and each
+// bound re-parsed through fmt.Sscanf.
+type patternValidationStruct struct {
+	Slug  string  `json:"slug"  maxLength:"64"                minLength:"3" pattern:"^[a-z0-9-]+$"`
+	Code  string  `json:"code"  pattern:"^[A-Z]{3}-[0-9]{4}$"`
+	Count int     `json:"count" maximum:"1000"                minimum:"1"   multipleOf:"5"`
+	Ratio float64 `json:"ratio" maximum:"1"                   minimum:"0"   optional:"true"`
+}
+
+// noPatternValidationStruct is the same shape with no custom tags, as the
+// floor the custom tags are measured against.
+type noPatternValidationStruct struct {
+	Slug  string  `json:"slug"`
+	Code  string  `json:"code"`
+	Count int     `json:"count"`
+	Ratio float64 `json:"ratio"`
+}
+
+func BenchmarkValidation_PatternAndBounds(b *testing.B) {
+	ctx := &Ctx{}
+	testData := patternValidationStruct{Slug: "hello-world", Code: "ABC-1234", Count: 25, Ratio: 0.5}
+	rt := reflect.TypeFor[patternValidationStruct]()
+	errors := &val.ValidationError{}
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		errors.Errors = nil
+		_ = ctx.validateStruct(&testData, rt, errors)
+	}
+}
+
+func BenchmarkValidation_NoCustomTags(b *testing.B) {
+	ctx := &Ctx{}
+	testData := noPatternValidationStruct{Slug: "hello-world", Code: "ABC-1234", Count: 25, Ratio: 0.5}
+	rt := reflect.TypeFor[noPatternValidationStruct]()
+	errors := &val.ValidationError{}
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		errors.Errors = nil
+		_ = ctx.validateStruct(&testData, rt, errors)
+	}
+}

@@ -144,18 +144,114 @@ func (c *Ctx) getErrorCode(err validator.FieldError) string {
 	}
 }
 
-// validateCustomTags validates fields with our custom validation tags.
-func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.ValidationError) {
+// The custom tags (minLength, pattern, minimum and the rest) are properties of
+// the request type, not of the request. They used to be read and parsed on
+// every request: each pattern went through regexp.MatchString, which compiles
+// it, and each numeric bound went through fmt.Sscanf. Two pattern fields
+// alone cost over a hundred allocations a request.
+//
+// They are now parsed once per type into a customTagPlan, and compiled
+// patterns are shared across types through patternCache. The parse is the
+// same one as before (fmt.Sscanf with the same verbs), so a tag that failed to
+// parse and was ignored is still ignored, and a pattern that fails to compile
+// still fails every value it checks, as regexp.MatchString's error did.
+
+// customTagPlan is the parsed form of one struct level's custom tags.
+type customTagPlan struct {
+	fields []customFieldPlan
+}
+
+// customFieldPlan holds everything validateCustomTags needs to know about one
+// field. Fields that need no checking and are not flattened embedded structs
+// are left out of the plan entirely.
+type customFieldPlan struct {
+	// Flattened embedded struct handling.
+	sub         *customTagPlan // set when the field is flattened and is a struct
+	flatten     bool           // anonymous with no path, query, header or json tag
+	flattenPtr  bool
+	check       bool // has custom tags or is required
+	required    bool
+	index       int
+	name        string
+	minLength   int
+	maxLength   int
+	minimum     float64
+	maximum     float64
+	multipleOf  float64
+	hasMinLen   bool
+	hasMaxLen   bool
+	hasMinimum  bool
+	hasMaximum  bool
+	hasMultiple bool
+	pattern     string
+	patternRe   *regexp.Regexp // nil with a non-empty pattern means it did not compile
+	format      string
+	enumValues  []string
+	enumMessage string
+}
+
+var (
+	// customTagPlans caches *customTagPlan by reflect.Type.
+	customTagPlans sync.Map
+
+	// patternCache caches compiled pattern:"..." expressions by source. An
+	// expression that fails to compile is stored as a nil *regexp.Regexp.
+	patternCache sync.Map
+
+	// dateFormatRe backs format:"date".
+	dateFormatRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+)
+
+// compiledPattern returns the compiled form of pattern, or nil when it does
+// not compile.
+func compiledPattern(pattern string) *regexp.Regexp {
+	if cached, ok := patternCache.Load(pattern); ok {
+		return cached.(*regexp.Regexp) //nolint:forcetypeassert // only *regexp.Regexp is stored
+	}
+
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		re = nil
+	}
+
+	actual, _ := patternCache.LoadOrStore(pattern, re)
+
+	return actual.(*regexp.Regexp) //nolint:forcetypeassert // only *regexp.Regexp is stored
+}
+
+// customTagPlanFor returns the cached plan for rt, building it on first use.
+func customTagPlanFor(rt reflect.Type) *customTagPlan {
+	if cached, ok := customTagPlans.Load(rt); ok {
+		return cached.(*customTagPlan) //nolint:forcetypeassert // only *customTagPlan is stored
+	}
+
+	plan := buildCustomTagPlan(rt, map[reflect.Type]*customTagPlan{})
+
+	actual, _ := customTagPlans.LoadOrStore(rt, plan)
+
+	return actual.(*customTagPlan) //nolint:forcetypeassert // only *customTagPlan is stored
+}
+
+// buildCustomTagPlan parses rt's custom tags. building holds the plans under
+// construction so a type that embeds a pointer to itself resolves to the same
+// plan instead of recursing forever.
+func buildCustomTagPlan(rt reflect.Type, building map[reflect.Type]*customTagPlan) *customTagPlan {
+	if plan, ok := building[rt]; ok {
+		return plan
+	}
+
+	plan := &customTagPlan{}
+	building[rt] = plan
+
 	for i := range rt.NumField() {
 		field := rt.Field(i)
-		fieldValue := rv.Field(i)
 
-		// Skip unexported fields
 		if !field.IsExported() {
 			continue
 		}
 
-		// Handle embedded structs
+		fp := customFieldPlan{index: i}
+
 		if field.Anonymous {
 			hasExplicitTag := field.Tag.Get("path") != "" ||
 				field.Tag.Get("query") != "" ||
@@ -163,48 +259,133 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 				field.Tag.Get("json") != ""
 
 			if !hasExplicitTag {
+				fp.flatten = true
+
 				embeddedType := field.Type
-				embeddedValue := fieldValue
-
 				if embeddedType.Kind() == reflect.Pointer {
-					if embeddedValue.IsNil() {
-						continue
-					}
-
+					fp.flattenPtr = true
 					embeddedType = embeddedType.Elem()
-					embeddedValue = embeddedValue.Elem()
 				}
 
 				if embeddedType.Kind() == reflect.Struct {
-					c.validateCustomTags(embeddedValue, embeddedType, errors)
+					fp.sub = buildCustomTagPlan(embeddedType, building)
+					plan.fields = append(plan.fields, fp)
 
 					continue
 				}
 			}
 		}
 
-		// Check if field has any of our custom validation tags
-		hasCustomTags := field.Tag.Get("format") != "" ||
-			field.Tag.Get("minLength") != "" ||
-			field.Tag.Get("maxLength") != "" ||
-			field.Tag.Get("pattern") != "" ||
-			field.Tag.Get("minimum") != "" ||
-			field.Tag.Get("maximum") != "" ||
-			field.Tag.Get("multipleOf") != "" ||
-			field.Tag.Get("enum") != ""
+		parseCustomFieldTags(field, &fp)
 
-		fieldRequired := val.IsFieldRequired(field)
+		if fp.check || fp.flatten {
+			plan.fields = append(plan.fields, fp)
+		}
+	}
+
+	return plan
+}
+
+// parseCustomFieldTags fills fp from field's tags, parsing them exactly as the
+// per-request code used to.
+func parseCustomFieldTags(field reflect.StructField, fp *customFieldPlan) {
+	tag := field.Tag
+
+	hasCustomTags := tag.Get("format") != "" ||
+		tag.Get("minLength") != "" ||
+		tag.Get("maxLength") != "" ||
+		tag.Get("pattern") != "" ||
+		tag.Get("minimum") != "" ||
+		tag.Get("maximum") != "" ||
+		tag.Get("multipleOf") != "" ||
+		tag.Get("enum") != ""
+
+	fp.required = val.IsFieldRequired(field)
+	fp.check = hasCustomTags || fp.required
+
+	if !fp.check {
+		return
+	}
+
+	fp.name = val.GetFieldName(field)
+
+	if s := tag.Get("minLength"); s != "" {
+		_, err := fmt.Sscanf(s, "%d", &fp.minLength)
+		fp.hasMinLen = err == nil
+	}
+
+	if s := tag.Get("maxLength"); s != "" {
+		_, err := fmt.Sscanf(s, "%d", &fp.maxLength)
+		fp.hasMaxLen = err == nil
+	}
+
+	if s := tag.Get("pattern"); s != "" {
+		fp.pattern = s
+		fp.patternRe = compiledPattern(s)
+	}
+
+	fp.format = tag.Get("format")
+
+	if s := tag.Get("minimum"); s != "" {
+		_, err := fmt.Sscanf(s, "%f", &fp.minimum)
+		fp.hasMinimum = err == nil
+	}
+
+	if s := tag.Get("maximum"); s != "" {
+		_, err := fmt.Sscanf(s, "%f", &fp.maximum)
+		fp.hasMaximum = err == nil
+	}
+
+	if s := tag.Get("multipleOf"); s != "" {
+		_, err := fmt.Sscanf(s, "%f", &fp.multipleOf)
+		fp.hasMultiple = err == nil && fp.multipleOf != 0
+	}
+
+	if s := tag.Get("enum"); s != "" {
+		fp.enumValues = strings.Split(s, ",")
+		for i, v := range fp.enumValues {
+			fp.enumValues[i] = strings.TrimSpace(v)
+		}
+
+		fp.enumMessage = "must be one of: " + strings.Join(fp.enumValues, ", ")
+	}
+}
+
+// validateCustomTags validates fields with our custom validation tags.
+func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.ValidationError) {
+	c.validateCustomPlan(rv, customTagPlanFor(rt), errors)
+}
+
+func (c *Ctx) validateCustomPlan(rv reflect.Value, plan *customTagPlan, errors *val.ValidationError) {
+	for i := range plan.fields {
+		fp := &plan.fields[i]
+		fieldValue := rv.Field(fp.index)
+
+		// Handle embedded structs
+		if fp.flatten {
+			if fp.flattenPtr && fieldValue.IsNil() {
+				continue
+			}
+
+			if fp.sub != nil {
+				if fp.flattenPtr {
+					fieldValue = fieldValue.Elem()
+				}
+
+				c.validateCustomPlan(fieldValue, fp.sub, errors)
+
+				continue
+			}
+		}
 
 		// Skip if no validation needed: no custom tags AND (not required OR is optional)
-		if !hasCustomTags && !fieldRequired {
+		if !fp.check {
 			continue
 		}
 
-		fieldName := val.GetFieldName(field)
-
 		// Handle pointer fields
 		wasPointer := fieldValue.Kind() == reflect.Pointer
-		if fieldValue.Kind() == reflect.Pointer {
+		if wasPointer {
 			if fieldValue.IsNil() {
 				// Applies to body fields as well as parameters. Restricting
 				// this to parameters meant a required *T in a body was
@@ -213,8 +394,8 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 				// and the runtime disagreed. A pointer is how a caller says
 				// "I need to tell absent from zero"; it is not a statement
 				// about whether the field may be omitted.
-				if fieldRequired {
-					errors.AddWithCode(fieldName, "field is required", val.ErrCodeRequired, nil)
+				if fp.required {
+					errors.AddWithCode(fp.name, "field is required", val.ErrCodeRequired, nil)
 				}
 
 				continue
@@ -235,20 +416,21 @@ func (c *Ctx) validateCustomTags(rv reflect.Value, rt reflect.Type, errors *val.
 		//
 		// The parameter and body cases were separate branches doing the same
 		// thing; they are one check now.
-		if fieldRequired && !wasPointer && fieldValue.Kind() == reflect.String && fieldValue.String() == "" {
-			errors.AddWithCode(fieldName, "field is required", val.ErrCodeRequired, "")
+		if fp.required && !wasPointer && fieldValue.Kind() == reflect.String && fieldValue.String() == "" {
+			errors.AddWithCode(fp.name, "field is required", val.ErrCodeRequired, "")
 
 			continue
 		}
 
 		// Custom tag validation
-		c.validateFieldCustomTags(field, fieldValue, fieldName, errors)
+		c.validateFieldCustomTags(fp, fieldValue, errors)
 	}
 }
 
-// validateFieldCustomTags validates a field using our custom tags.
-func (c *Ctx) validateFieldCustomTags(field reflect.StructField, fieldValue reflect.Value, fieldName string, errors *val.ValidationError) {
-	isOptional := !val.IsFieldRequired(field)
+// validateFieldCustomTags validates a field using its parsed custom tags.
+func (c *Ctx) validateFieldCustomTags(fp *customFieldPlan, fieldValue reflect.Value, errors *val.ValidationError) {
+	fieldName := fp.name
+	isOptional := !fp.required
 	isEmpty := val.IsZeroValue(fieldValue)
 
 	// String validations
@@ -256,35 +438,26 @@ func (c *Ctx) validateFieldCustomTags(field reflect.StructField, fieldValue refl
 		value := fieldValue.String()
 
 		// MinLength
-		if minLengthTag := field.Tag.Get("minLength"); minLengthTag != "" {
-			var minLen int
-			if _, err := fmt.Sscanf(minLengthTag, "%d", &minLen); err == nil && (!isOptional || !isEmpty) {
-				if len(value) < minLen {
-					errors.AddWithCode(fieldName, fmt.Sprintf("must be at least %d characters", minLen), val.ErrCodeMinLength, value)
-				}
-			}
+		if fp.hasMinLen && (!isOptional || !isEmpty) && len(value) < fp.minLength {
+			errors.AddWithCode(fieldName, fmt.Sprintf("must be at least %d characters", fp.minLength), val.ErrCodeMinLength, value)
 		}
 
 		// MaxLength
-		if maxLengthTag := field.Tag.Get("maxLength"); maxLengthTag != "" {
-			var maxLen int
-			if _, err := fmt.Sscanf(maxLengthTag, "%d", &maxLen); err == nil {
-				if len(value) > maxLen {
-					errors.AddWithCode(fieldName, fmt.Sprintf("must be at most %d characters", maxLen), val.ErrCodeMaxLength, value)
-				}
-			}
+		if fp.hasMaxLen && len(value) > fp.maxLength {
+			errors.AddWithCode(fieldName, fmt.Sprintf("must be at most %d characters", fp.maxLength), val.ErrCodeMaxLength, value)
 		}
 
-		// Pattern
-		if pattern := field.Tag.Get("pattern"); pattern != "" && (!isOptional || !isEmpty) {
-			if matched, _ := regexp.MatchString(pattern, value); !matched {
+		// Pattern. A pattern that does not compile matches nothing, as it
+		// did when regexp.MatchString reported the compile error as false.
+		if fp.pattern != "" && (!isOptional || !isEmpty) {
+			if fp.patternRe == nil || !fp.patternRe.MatchString(value) {
 				errors.AddWithCode(fieldName, "does not match required pattern", val.ErrCodePattern, value)
 			}
 		}
 
 		// Format
-		if format := field.Tag.Get("format"); format != "" && (!isOptional || !isEmpty) {
-			c.validateFormat(format, value, fieldName, errors)
+		if fp.format != "" && (!isOptional || !isEmpty) {
+			c.validateFormat(fp.format, value, fieldName, errors)
 		}
 	}
 
@@ -304,51 +477,29 @@ func (c *Ctx) validateFieldCustomTags(field reflect.StructField, fieldValue refl
 		isZero := numValue == 0
 
 		// Minimum
-		if minTag := field.Tag.Get("minimum"); minTag != "" {
-			var minValue float64
-			if _, err := fmt.Sscanf(minTag, "%f", &minValue); err == nil {
-				if !isOptional || !isZero || minValue == 0 {
-					if numValue < minValue {
-						errors.AddWithCode(fieldName, fmt.Sprintf("must be at least %v", minValue), val.ErrCodeMinValue, numValue)
-					}
-				}
-			}
+		if fp.hasMinimum && (!isOptional || !isZero || fp.minimum == 0) && numValue < fp.minimum {
+			errors.AddWithCode(fieldName, fmt.Sprintf("must be at least %v", fp.minimum), val.ErrCodeMinValue, numValue)
 		}
 
 		// Maximum
-		if maxTag := field.Tag.Get("maximum"); maxTag != "" {
-			var maxValue float64
-			if _, err := fmt.Sscanf(maxTag, "%f", &maxValue); err == nil {
-				if numValue > maxValue {
-					errors.AddWithCode(fieldName, fmt.Sprintf("must be at most %v", maxValue), val.ErrCodeMaxValue, numValue)
-				}
-			}
+		if fp.hasMaximum && numValue > fp.maximum {
+			errors.AddWithCode(fieldName, fmt.Sprintf("must be at most %v", fp.maximum), val.ErrCodeMaxValue, numValue)
 		}
 
 		// MultipleOf
-		if multipleOfTag := field.Tag.Get("multipleOf"); multipleOfTag != "" && (!isOptional || !isZero) {
-			var multipleOf float64
-			if _, err := fmt.Sscanf(multipleOfTag, "%f", &multipleOf); err == nil && multipleOf != 0 {
-				if int(numValue)%int(multipleOf) != 0 {
-					errors.AddWithCode(fieldName, fmt.Sprintf("must be a multiple of %v", multipleOf), val.ErrCodeInvalidType, numValue)
-				}
-			}
+		if fp.hasMultiple && (!isOptional || !isZero) && int(numValue)%int(fp.multipleOf) != 0 {
+			errors.AddWithCode(fieldName, fmt.Sprintf("must be a multiple of %v", fp.multipleOf), val.ErrCodeInvalidType, numValue)
 		}
 	}
 
 	// Enum validation
-	if enumTag := field.Tag.Get("enum"); enumTag != "" && (!isOptional || !isEmpty) {
-		c.validateEnumTag(fieldValue, fieldName, enumTag, errors)
+	if fp.enumValues != nil && (!isOptional || !isEmpty) {
+		c.validateEnumTag(fieldValue, fieldName, fp, errors)
 	}
 }
 
 // validateEnumTag validates enum constraints.
-func (c *Ctx) validateEnumTag(fieldValue reflect.Value, fieldName string, enumTag string, errors *val.ValidationError) {
-	enumValues := strings.Split(enumTag, ",")
-	for i, v := range enumValues {
-		enumValues[i] = strings.TrimSpace(v)
-	}
-
+func (c *Ctx) validateEnumTag(fieldValue reflect.Value, fieldName string, fp *customFieldPlan, errors *val.ValidationError) {
 	var strValue string
 
 	switch fieldValue.Kind() {
@@ -360,10 +511,8 @@ func (c *Ctx) validateEnumTag(fieldValue reflect.Value, fieldName string, enumTa
 		strValue = fmt.Sprintf("%v", fieldValue.Interface())
 	}
 
-	found := slices.Contains(enumValues, strValue)
-
-	if !found {
-		errors.AddWithCode(fieldName, "must be one of: "+strings.Join(enumValues, ", "), val.ErrCodeEnum, strValue)
+	if !slices.Contains(fp.enumValues, strValue) {
+		errors.AddWithCode(fieldName, fp.enumMessage, val.ErrCodeEnum, strValue)
 	}
 }
 
@@ -383,8 +532,7 @@ func (c *Ctx) validateFormat(format string, value string, fieldName string, erro
 			errors.AddWithCode(fieldName, "must be a valid URL", val.ErrCodeInvalidFormat, value)
 		}
 	case "date":
-		matched, _ := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, value)
-		if !matched {
+		if !dateFormatRe.MatchString(value) {
 			errors.AddWithCode(fieldName, "must be a valid date (YYYY-MM-DD)", val.ErrCodeInvalidFormat, value)
 		}
 	case "date-time":
